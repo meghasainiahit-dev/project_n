@@ -2,3 +2,48 @@
 @media(max-width:1000px){.topic-card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.topic-toolbar{align-items:flex-start;flex-direction:column}.topic-search{width:100%}}
 @media(max-width:760px){.topic-learning-layout{grid-template-columns:1fr}.topic-progress-card{display:grid;grid-template-columns:30px 1fr auto;align-items:center;column-gap:8px}.topic-progress-icon{grid-row:span 2}.topic-progress-card>small{margin:0}.topic-progress-card>strong{grid-column:3;grid-row:1/3;margin:0}.topic-progress-card>span:nth-of-type(1){grid-column:2}.topic-level-progress{grid-column:1/-1;grid-template-columns:repeat(3,1fr);margin-top:10px;padding-top:10px;border-top:1px solid #edf0ec}.topic-level-progress span{font-size:7px}.topic-level-row{align-items:flex-start;flex-direction:column}.topic-level-tabs{width:100%}.topic-level-tabs button{flex:1}.aptitude-summary{align-items:flex-start}.topic-detail-head{padding:16px}.topic-detail-head h2{font-size:21px}}
 @media(max-width:480px){.topic-card-grid{grid-template-columns:1fr}.topic-card{min-height:148px}.topic-card-desc{-webkit-line-clamp:3}.topic-filters{gap:4px}.topic-filter{padding:7px 8px;font-size:7px}.topic-count{font-size:7px}.aptitude-summary{gap:9px;padding:13px}.aptitude-summary-icon{width:32px;height:32px}.topic-detail-icon{width:42px;height:42px;font-size:18px}.topic-detail-head h2{font-size:18px}.aptitude-quiz-card{padding:13px}.quiz-stem{font-size:11px}}
+
+/* Aptitude detail and question bank dark theme */
+.learn-app .aptitude-summary,.learn-app .topic-detail-head{background:linear-gradient(110deg,#19251d,#151c17);border-color:#2d3b32}
+.learn-app .aptitude-summary-icon,.learn-app .topic-detail-icon{background:#25362a;color:#a9d1a8}
+.learn-app .topic-search,.learn-app .topic-filter,.learn-app .topic-card,.learn-app .topic-lesson-card,.learn-app .topic-progress-card,.learn-app .aptitude-quiz-card,.learn-app .quiz-option{background:#141c17;color:#e1eae3;border-color:#2b3931}
+.learn-app .topic-filter.active,.learn-app .topic-level-tabs button.active{background:#24362a;color:#d5eed7}
+.learn-app .topic-overlap-note,.learn-app .topic-card-tags i,.learn-app .topic-level-tabs,.learn-app .topic-level-progress i,.learn-app .quiz-question-count{background:#1a241d;color:#b7c6ba;border-color:#303e34}
+.learn-app .topic-card strong,.learn-app .topic-detail-head h2,.learn-app .topic-lesson-card h3,.learn-app .aptitude-quiz-card h3{color:#e4ece6}
+.learn-app .topic-card-desc,.learn-app .topic-detail-head p,.learn-app .topic-count,.learn-app .topic-filter,.learn-app .topic-overlap-note{color:#a3b0a6}
+.learn-app .topic-card:hover,.learn-app .quiz-option:hover:not(:disabled){background:#1b2820;border-color:#5b8062}
+.learn-app .quiz-option.selected{background:#203227;border-color:#72a57b}
+.learn-app .quiz-option.answer-correct,.learn-app .quiz-feedback.is-correct{background:#1c3021;border-color:#4d8055;color:#d6eed8}
+.learn-app .quiz-option.answer-incorrect,.learn-app .quiz-feedback.is-incorrect{background:#30201d;border-color:#7c4b3c;color:#f0d1c8}
+.learn-app .topic-lesson-content,.learn-app .topic-lesson-content li,.learn-app .quiz-instruction{color:#bdc9c0}
+.learn-app .aptitude-worked-example{margin-top:14px;padding:14px;border:1px solid #314238;border-radius:8px;background:#18221b;color:#d8e3da}
+.learn-app .aptitude-worked-example>strong{color:#9bcaa4;font-size:9px;letter-spacing:.08em}
+.learn-app .aptitude-worked-example p,.learn-app .aptitude-worked-example li{color:#c3d0c6;font-size:11px;line-height:1.6}
+
+/* Navy and cool-grey aptitude palette */
+.learn-app .aptitude-summary,.learn-app .topic-detail-head{background:linear-gradient(110deg,#24344d,#1d293c);border-color:#3a4a61}
+.learn-app .aptitude-summary-icon,.learn-app .topic-detail-icon{background:#35465f;color:#d2dbe7}
+.learn-app .topic-card-grid>.topic-card:nth-child(odd){background:#dfe4ea;border-color:#c6ced8}
+.learn-app .topic-card-grid>.topic-card:nth-child(odd)>strong{color:#26364d}
+.learn-app .topic-card-grid>.topic-card:nth-child(odd) .topic-card-desc,.learn-app .topic-card-grid>.topic-card:nth-child(odd) .topic-card-meta{color:#536174}
+.learn-app .topic-card-grid>.topic-card:nth-child(odd) .topic-card-tags i{background:#cfd6df;color:#455267}
+.learn-app .topic-card-grid>.topic-card:nth-child(even){background:#172338;border-color:#34445b}
+.learn-app .topic-card-grid>.topic-card:nth-child(even)>strong{color:#e2e7ed}
+.learn-app .topic-card-grid>.topic-card:nth-child(even) .topic-card-desc,.learn-app .topic-card-grid>.topic-card:nth-child(even) .topic-card-meta{color:#aeb9c8}
+.learn-app .topic-search,.learn-app .topic-filter,.learn-app .topic-lesson-card,.learn-app .topic-progress-card,.learn-app .aptitude-quiz-card,.learn-app .quiz-option{background:#202d41;color:#e2e7ed;border-color:#3a4960}
+.learn-app .topic-filter.active,.learn-app .topic-level-tabs button.active{background:#35465f;color:#f0f3f7}
+.learn-app .topic-overlap-note,.learn-app .topic-level-tabs,.learn-app .topic-level-progress i,.learn-app .quiz-question-count{background:#2b394d;color:#c4cedb;border-color:#46556a}
+.learn-app .topic-card-grid>.topic-card:nth-child(odd) .topic-card-icon{background:#c7d0dc;color:#34445a}
+.learn-app .topic-card-grid>.topic-card:nth-child(even) .topic-card-icon{background:#34445a;color:#e0e7ef}
+.learn-app .topic-card-grid>.topic-card:nth-child(odd):hover,.learn-app .topic-card-grid>.topic-card:nth-child(odd):focus-visible{background:#edf0f4;border-color:#7788a0}
+.learn-app .topic-card-grid>.topic-card:nth-child(even):hover,.learn-app .topic-card-grid>.topic-card:nth-child(even):focus-visible{background:#26354b;border-color:#71829a}
+.learn-app .topic-card-grid>.topic-card:nth-child(even)>strong,.learn-app .topic-detail-head h2,.learn-app .topic-lesson-card h3,.learn-app .aptitude-quiz-card h3{color:#e2e7ed}
+.learn-app .topic-card-desc,.learn-app .topic-detail-head p,.learn-app .topic-count,.learn-app .topic-filter,.learn-app .topic-overlap-note{color:#adb8c7}
+.learn-app .topic-lesson-content,.learn-app .topic-lesson-content li,.learn-app .quiz-instruction,.learn-app .quiz-stem{color:#c9d2dd}
+.learn-app .topic-level-row,.learn-app .topic-source-row,.learn-app .quiz-feedback details{border-color:#3a4960}
+.learn-app .quiz-option.selected{background:#34445b;border-color:#73859d}
+.learn-app .quiz-option.answer-correct,.learn-app .quiz-feedback.is-correct{background:#243a36;border-color:#567d72;color:#d9ebe5}
+.learn-app .quiz-option.answer-incorrect,.learn-app .quiz-feedback.is-incorrect{background:#422c31;border-color:#8d626b;color:#f0dadd}
+.learn-app .aptitude-worked-example{border-color:#46556a;background:#2b394d;color:#e1e7ee}
+.learn-app .aptitude-worked-example>strong{color:#d2dce8}
+.learn-app .aptitude-worked-example p,.learn-app .aptitude-worked-example li{color:#c6d0dc}

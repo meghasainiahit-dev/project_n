@@ -1,6 +1,44 @@
 (() => {
   const app = document.querySelector('.learn-app');
   if (!app) return;
+  const themeToggle = document.querySelector('#themeToggle');
+  const savedTheme = localStorage.getItem('northstar-catalog-theme');
+  const applyTheme = theme => {
+    const isLight = theme === 'light';
+    document.body.dataset.theme = isLight ? 'light' : 'dark';
+    const themeColor = document.querySelector('meta[name="theme-color"]');
+    if (themeColor) themeColor.content = isLight ? '#f2f4f7' : '#0b1220';
+    if (!themeToggle) return;
+    themeToggle.setAttribute('aria-pressed', String(isLight));
+    themeToggle.setAttribute('aria-label', `Switch to ${isLight ? 'dark' : 'light'} mode`);
+    themeToggle.querySelector('.theme-toggle-icon').textContent = isLight ? '☾' : '☀';
+    themeToggle.querySelector('.theme-toggle-label').textContent = isLight ? 'Dark mode' : 'Light mode';
+  };
+  applyTheme(savedTheme === 'dark' ? 'dark' : 'light');
+  themeToggle?.addEventListener('click', () => {
+    const nextTheme = document.body.dataset.theme === 'light' ? 'dark' : 'light';
+    localStorage.setItem('northstar-catalog-theme', nextTheme);
+    applyTheme(nextTheme);
+  });
+  const catalogSearch = document.querySelector('#catalogSearch');
+  const catalogEmpty = document.querySelector('#catalogEmpty');
+  catalogSearch?.addEventListener('input', () => {
+    const query = catalogSearch.value.trim().toLowerCase();
+    const cards = [...document.querySelectorAll('.catalog-card, .academy-card')];
+    let visibleCatalogCards = 0;
+    cards.forEach(card => {
+      const matches = !query || card.textContent.toLowerCase().includes(query);
+      card.hidden = !matches;
+      if (card.classList.contains('catalog-card') && matches) visibleCatalogCards += 1;
+    });
+    if (catalogEmpty) catalogEmpty.hidden = !query || visibleCatalogCards > 0;
+  });
+  document.addEventListener('keydown', event => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      catalogSearch?.focus();
+    }
+  });
   const csrf = app.dataset.csrf;
   const languages = [
     ['Arabic','ar','ar-SA'],['Bengali','bn','bn-BD'],['Chinese (Mandarin)','zh','zh-CN'],['Dutch','nl','nl-NL'],['English','en','en-US'],['French','fr','fr-FR'],['German','de','de-DE'],['Greek','el','el-GR'],['Gujarati','gu','gu-IN'],['Hebrew','he','he-IL'],['Hindi','hi','hi-IN'],['Indonesian','id','id-ID'],['Italian','it','it-IT'],['Japanese','ja','ja-JP'],['Kannada','kn','kn-IN'],['Korean','ko','ko-KR'],['Malayalam','ml','ml-IN'],['Marathi','mr','mr-IN'],['Nepali','ne','ne-NP'],['Persian','fa','fa-IR'],['Polish','pl','pl-PL'],['Portuguese','pt','pt-BR'],['Punjabi','pa','pa-IN'],['Russian','ru','ru-RU'],['Spanish','es','es-ES'],['Swahili','sw','sw-KE'],['Tamil','ta','ta-IN'],['Telugu','te','te-IN'],['Thai','th','th-TH'],['Turkish','tr','tr-TR'],['Ukrainian','uk','uk-UA'],['Urdu','ur','ur-PK'],['Vietnamese','vi','vi-VN'],['Other language','','']
@@ -157,11 +195,104 @@
     const toast = $('#toast'); toast.textContent = message; toast.classList.add('show');
     clearTimeout(showToast.timer); showToast.timer = setTimeout(() => toast.classList.remove('show'), 2800);
   }
+  const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const revealTargets = '.catalog-hero, .catalog-stats > article, .catalog-grid > *, .academy-band > *, .catalog-promos > *, .feature-card, .lesson-row, .soft-skill-card, .topic-card, .progress-summary > article, .practice-banner, .resource-card';
+  const revealObserver = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      entry.target.classList.add('is-visible');
+      revealObserver.unobserve(entry.target);
+    });
+  }, {threshold: 0.08});
+  function revealWithin(scope = document, replay = false) {
+    scope.querySelectorAll(revealTargets).forEach((item, index) => {
+      if (item.classList.contains('scroll-reveal')) {
+        if (!replay) return;
+        revealObserver.unobserve(item);
+        item.classList.remove('is-visible');
+      }
+      item.classList.add('scroll-reveal');
+      item.style.transitionDelay = `${(index % 5) * 65}ms`;
+      revealObserver.observe(item);
+    });
+  }
+  function animateCounters(scope = document) {
+    scope.querySelectorAll('[data-count-up]').forEach(item => {
+      if (item.dataset.counted === 'true') return;
+      const finalValue = Number(item.dataset.countUp);
+      if (!Number.isFinite(finalValue) || item.dataset.countUp === '') return;
+      item.dataset.counted = 'true';
+      const start = performance.now();
+      const initial = 0;
+      if (motionQuery.matches) { item.textContent = String(finalValue); return; }
+      const frame = now => {
+        const progress = Math.min(1, (now - start) / 850);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        item.textContent = String(Math.round(initial + (finalValue - initial) * eased));
+        if (progress < 1) requestAnimationFrame(frame);
+      };
+      item.textContent = '0';
+      requestAnimationFrame(frame);
+    });
+  }
+  function animateProgressFill() {
+    const fill = $('#practiceScoreFill');
+    if (!fill) return;
+    const progress = Math.max(0, Math.min(100, Number(fill.dataset.progressFill) || 0));
+    requestAnimationFrame(() => { fill.style.width = `${progress}%`; });
+  }
+  revealWithin();
+  animateCounters();
+  animateProgressFill();
+  const revealMutationObserver = new MutationObserver(() => revealWithin());
+  revealMutationObserver.observe(app, {childList: true, subtree: true});
+  const sidebarToggle = $('#sidebarToggle');
+  const mobileLayout = window.matchMedia('(max-width: 760px)');
+  function setSidebarCollapsed(collapsed) {
+    document.body.classList.toggle('sidebar-collapsed', collapsed);
+    sidebarToggle?.setAttribute('aria-expanded', String(!collapsed));
+    sidebarToggle?.setAttribute('aria-label', collapsed ? 'Show sidebar' : 'Hide sidebar');
+  }
+  setSidebarCollapsed(mobileLayout.matches);
+  sidebarToggle?.addEventListener('click', () => setSidebarCollapsed(!document.body.classList.contains('sidebar-collapsed')));
+  mobileLayout.addEventListener?.('change', event => setSidebarCollapsed(event.matches));
+  const carousel = $('#dashboardCarousel');
+  if (carousel) {
+    const slides = $$('.dashboard-slide', carousel);
+    const dots = $$('.dashboard-dots button', carousel);
+    let currentSlide = 0;
+    let carouselTimer;
+    const showSlide = next => {
+      currentSlide = (next + slides.length) % slides.length;
+      slides.forEach((slide, index) => slide.classList.toggle('active', index === currentSlide));
+      dots.forEach((dot, index) => dot.classList.toggle('active', index === currentSlide));
+      const indexLabel = $('#heroIndexCurrent');
+      if (indexLabel) indexLabel.textContent = String(currentSlide + 1).padStart(2, '0');
+    };
+    const restartCarousel = () => {
+      window.clearInterval(carouselTimer);
+      if (!motionQuery.matches) carouselTimer = window.setInterval(() => showSlide(currentSlide + 1), 6000);
+    };
+    $('#heroPrev')?.addEventListener('click', () => { showSlide(currentSlide - 1); restartCarousel(); });
+    $('#heroNext')?.addEventListener('click', () => { showSlide(currentSlide + 1); restartCarousel(); });
+    dots.forEach((dot, index) => dot.addEventListener('click', () => { showSlide(index); restartCarousel(); }));
+    carousel.addEventListener('mouseenter', () => window.clearInterval(carouselTimer));
+    carousel.addEventListener('mouseleave', restartCarousel);
+    restartCarousel();
+  }
   function switchSection(section) {
     const allowed = ['home','language','soft','aptitude','progress'].includes(section) ? section : 'home';
     $$('.view-panel').forEach(view => view.classList.remove('active'));
     const viewId = allowed === 'home' ? 'homeView' : allowed === 'language' ? 'languageView' : allowed === 'soft' ? 'softView' : allowed === 'aptitude' ? 'aptitudeView' : 'progressView';
-    const target = $(`#${viewId}`); if (target) target.classList.add('active');
+    const target = $(`#${viewId}`); if (target) {
+      target.classList.add('active');
+      target.classList.remove('section-entering');
+      void target.offsetWidth;
+      target.classList.add('section-entering');
+      window.setTimeout(() => target.classList.remove('section-entering'), 700);
+      revealWithin(target, true);
+      animateCounters(target);
+    }
     $$('.side-link').forEach(link => link.classList.toggle('active', link.dataset.section === allowed));
     $('#breadcrumbCurrent').textContent = allowed === 'language' ? `${language} speaking` : allowed === 'soft' ? 'Soft skills' : allowed === 'aptitude' ? 'Aptitude & cognitive skills' : allowed === 'progress' ? 'My progress' : 'Dashboard';
     window.scrollTo({top:0,behavior:'smooth'});
@@ -205,6 +336,8 @@
       const scored = rows.filter(row => row.score !== null);
       const average = scored.length ? Math.round(scored.reduce((sum,row)=>sum+Number(row.score),0)/scored.length) : null;
       $('#progressScore').innerHTML = average === null ? '—' : `${average}<small> / 100</small>`;
+      const scoreFill = $('#practiceScoreFill');
+      if (scoreFill) { scoreFill.dataset.progressFill = String(average || 0); scoreFill.style.width = `${average || 0}%`; }
     } catch (_) { /* the dashboard remains usable if progress is temporarily unavailable */ }
   }
   refreshLanguage(); loadProgress();

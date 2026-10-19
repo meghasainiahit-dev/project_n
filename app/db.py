@@ -1,5 +1,3 @@
-
-
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 import os
@@ -52,7 +50,7 @@ def init_db():
               created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
             ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
         """)
-        # Upgrade databases created by earlier versions of this project.
+        
         for table, column, definition in (
             ("users", "password_hash", "VARCHAR(255) NULL"),
             ("email_challenges", "password_hash", "VARCHAR(255) NULL"),

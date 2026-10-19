@@ -113,6 +113,7 @@ def main():
     )
 
 
+
 if __name__ == "__main__":
     try:
         main()
@@ -123,3 +124,5 @@ if __name__ == "__main__":
             + ". Fix the message above, then run python run.py again.",
             exc.returncode or 1,
         )
+    except OSError as exc:
+        stop(f"Could not start the app process: {exc}")
