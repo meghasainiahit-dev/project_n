@@ -1,0 +1,429 @@
+/* Shared dark-violet theme applied across every Northstar app view. */
+.learn-app.content-mode {
+  --ui-bg: #08090f;
+  --ui-surface: #11121a;
+  --ui-border: #272633;
+  --ui-ink: #f4f2fb;
+  --ui-muted: #a7a3b8;
+  --learn-ink: #f4f2fb;
+  --learn-muted: #aaa6bc;
+  --learn-line: #292735;
+  --learn-green: #8b7cf6;
+  color: var(--ui-ink);
+  background: var(--ui-bg);
+}
+.learn-app.content-mode .learn-site-header { background: #0d0d15; border-color: #23222e; }
+.learn-app.content-mode .learn-site-header .learn-brand { color: #f4f2fb; }
+.learn-app.content-mode .learn-site-header .brand-mark { color: #8c7cff; }
+.learn-app.content-mode .learn-nav { width: 62px; padding: 18px 7px; background: #090910; border-color: #201f2b; }
+.learn-app.content-mode .learn-nav .side-link { justify-content: center; gap: 0; padding: 8px 4px; color: #aaa6bd; }
+.learn-app.content-mode .learn-nav .side-link > span:not(.side-icon) { display: none; }
+.learn-app.content-mode .learn-nav .side-link.active,
+.learn-app.content-mode .learn-nav .side-link:hover { background: #211d3a; color: #d9d2ff; }
+.learn-app.content-mode .learn-nav .side-link.active::before { background: #8877ff; }
+.learn-app.content-mode .learn-nav .side-icon { width: 36px; height: 36px; border-color: #343044; background: #171621; color: #b9b0ff; }
+.learn-app.content-mode .learn-main { width: calc(100% - 62px); margin-left: 62px; max-width: none; padding: 0 clamp(18px, 4vw, 58px) 48px; }
+body.sidebar-collapsed .learn-app.content-mode .learn-nav { width: 0; padding-inline: 0; opacity: 0; transform: translateX(-100%); pointer-events: none; }
+body.sidebar-collapsed .learn-app.content-mode .learn-main { width: 100%; margin-left: 0; }
+.learn-app.content-mode .learn-topbar { border-color: #292735; }
+.learn-app.content-mode .breadcrumbs,
+.learn-app.content-mode .breadcrumbs strong { color: #c2bdd2; }
+.learn-app.content-mode .today-label { color: #9691a8; }
+.learn-app.content-mode .view-panel:not(#homeView) { color: #f4f2fb; }
+.learn-app.content-mode .view-panel:not(#homeView) h1,
+.learn-app.content-mode .view-panel:not(#homeView) h2,
+.learn-app.content-mode .view-panel:not(#homeView) h3,
+.learn-app.content-mode .view-panel:not(#homeView) h4 { color: #f5f3fc; }
+.learn-app.content-mode .view-panel:not(#homeView) p,
+.learn-app.content-mode .view-panel:not(#homeView) small { color: #aaa6bc; }
+.learn-app.content-mode .view-panel:not(#homeView) .dark-eyebrow,
+.learn-app.content-mode .view-panel:not(#homeView) .section-kicker,
+.learn-app.content-mode .view-panel:not(#homeView) .feature-tag { color: #aaa0ff; }
+.learn-app.content-mode .view-panel:not(#homeView) .page-intro h1 em { color: #a99bff; }
+.learn-app.content-mode .view-panel:not(#homeView) .page-intro { padding-bottom: 8px; }
+
+/* Bring the dashboard into the same visual family while retaining its own layout. */
+.learn-app.content-mode #homeView { color: #f4f2fb; }
+.learn-app.content-mode #homeView h1,
+.learn-app.content-mode #homeView h2,
+.learn-app.content-mode #homeView h3,
+.learn-app.content-mode #homeView strong { color: #f5f3fc; }
+.learn-app.content-mode #homeView p,
+.learn-app.content-mode #homeView small,
+.learn-app.content-mode #homeView .micro-copy { color: #aaa6bc; }
+.learn-app.content-mode .catalog-hero { grid-template-columns: minmax(0,1.5fr) minmax(250px,.8fr); }
+.learn-app.content-mode .hero-primary { background: linear-gradient(115deg,#25206b,#493ba9 55%,#7d63e9); border-color: #6455c8; box-shadow: 0 18px 48px #4d3a9b46; }
+.learn-app.content-mode .hero-primary .hero-copy .catalog-eyebrow,
+.learn-app.content-mode .hero-primary .hero-copy>p:not(.hero-greeting) { color: #e2dcff; }
+.learn-app.content-mode .hero-primary h1 em { color: #f4c85b; }
+.learn-app.content-mode .hero-secondary { background: radial-gradient(circle at 85% 25%,#604719 0,transparent 34%),linear-gradient(145deg,#17151d,#111117); border-color: #302a22; }
+.learn-app.content-mode .hero-secondary h2,
+.learn-app.content-mode .hero-secondary p { color: #f4f1f9; }
+.learn-app.content-mode .catalog-stats article,
+.learn-app.content-mode .home-progress-note { border-color: #292735; background: #12121a; color: #f4f2fb; }
+.learn-app.content-mode .catalog-card { background: #12121a; border-color: #302d40; }
+.learn-app.content-mode .catalog-card-language .catalog-art { background: linear-gradient(130deg,#554be1,#8b6df0); }
+.learn-app.content-mode .catalog-card-soft .catalog-art { background: linear-gradient(130deg,#a86508,#f3a11d); }
+.learn-app.content-mode .catalog-card-aptitude .catalog-art { background: linear-gradient(130deg,#077d78,#15c2a5); }
+.learn-app.content-mode .catalog-card-body>strong { color: #f3f0fa; }
+.learn-app.content-mode .catalog-card-body>small { color: #aaa6bc; }
+.learn-app.content-mode .catalog-card-action { border-color: #302d40; color: #c3baff; }
+.learn-app.content-mode .academy-band { border-color: #2c2938; background: #111118; }
+.learn-app.content-mode .academy-card { background: #171620; color: #f4f2fb; border-color: #302d40; }
+.learn-app.content-mode .academy-card>strong { color: #f4f2fb; }
+.learn-app.content-mode .academy-card>small,
+.learn-app.content-mode .academy-card-meta { color: #aaa6bc; }
+.learn-app.content-mode .academy-art { border-radius: 14px; background: linear-gradient(130deg,#5146cf,#8a70f1); }
+.learn-app.content-mode .academy-aptitude { background: linear-gradient(130deg,#aa6410,#f49c20); }
+.learn-app.content-mode .academy-soft { background: linear-gradient(130deg,#087a77,#14bda3); }
+.learn-app.content-mode .promo-card { border-color: #6153c7; background: linear-gradient(120deg,#29277e,#6c5ce0); }
+.learn-app.content-mode .promo-progress { border-color: #2c2938; background: linear-gradient(120deg,#181622,#111118); }
+.learn-app.content-mode .home-progress-note button { color: #c3baff; }
+.learn-app.content-mode .brand-mark svg,
+.learn-app.content-mode .sidebar-toggle svg,
+.learn-app.content-mode .secondary-mark svg,
+.learn-app.content-mode .academy-spark svg,
+.learn-app.content-mode .catalog-art i svg,
+.learn-app.content-mode .academy-art svg,
+.learn-app.content-mode .skill-card-icon svg,
+.learn-app.content-mode .topic-card-icon svg,
+.learn-app.content-mode .topic-card-arrow svg,
+.learn-app.content-mode .lesson-index svg,
+.learn-app.content-mode .lesson-open svg,
+.learn-app.content-mode .skill-card-link svg,
+.learn-app.content-mode .practice-icon svg,
+.learn-app.content-mode .theme-toggle-icon svg { display: block; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.learn-app.content-mode .brand-mark svg { width: 29px; height: 29px; }
+.learn-app.content-mode .sidebar-toggle { background: #181622; color: #c4baff; border-color: #343044; }
+.learn-app.content-mode .catalog-art i svg { width: 48px; height: 48px; }
+.learn-app.content-mode .academy-art svg { width: 42px; height: 42px; }
+.learn-app.content-mode .secondary-mark svg,
+.learn-app.content-mode .academy-spark svg { width: 19px; height: 19px; }
+.learn-app.content-mode .lesson-index { position: relative; display: grid; place-items: center; }
+.learn-app.content-mode .lesson-index svg { width: 28px; height: 28px; }
+.learn-app.content-mode .lesson-index i { position: absolute; top: -6px; right: -7px; display: grid; width: 22px; height: 22px; place-items: center; border: 2px solid #12121a; border-radius: 50%; background: #0b0b12; color: #fff; font: 700 9px "DM Sans",sans-serif; }
+.learn-app.content-mode .lesson-open svg,
+.learn-app.content-mode .topic-card-arrow svg,
+.learn-app.content-mode .skill-card-link svg { width: 19px; height: 19px; }
+.learn-app.content-mode .skill-card-link b { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 12px; background: #8074f2; color: #fff; }
+.learn-app.content-mode .home-progress-mark svg,
+.learn-app.content-mode .illus-star svg,
+.learn-app.content-mode .resource-icon svg,
+.learn-app.content-mode .video-thumb svg,
+.learn-app.content-mode .topic-detail-icon svg { display:block; width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+.learn-app.content-mode .home-progress-mark svg { width:19px; height:19px; }
+.learn-app.content-mode .illus-star svg { width:17px; height:17px; }
+.learn-app.content-mode .topic-detail-icon { display:grid; place-items:center; }
+.learn-app.content-mode .practice-icon svg,
+.learn-app.content-mode .practice-orb svg,
+.learn-app.content-mode .aptitude-summary-icon svg,
+.learn-app.content-mode .topic-progress-icon svg,
+.learn-app.content-mode .placement-type-icon svg,
+.learn-app.content-mode .coach-avatar svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.learn-app.content-mode .coach-avatar { display: grid; place-items: center; background: #282342; color: #b8adff; }
+.learn-app.content-mode .practice-orb { background: #262143; color: #c3baff; }
+.learn-app.content-mode .placement-type-icon { background: #272244; color: #c9c0ff; }
+.learn-app.content-mode .theme-toggle { background: #191722; border-color: #343044; color: #d6d0e7; }
+.learn-app.content-mode .theme-toggle-icon svg { width: 17px; height: 17px; }
+.learn-app.content-mode .site-search>span svg,
+.learn-app.content-mode .logout-icon svg { display:block; width:17px; height:17px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+
+/* The header toggle keeps a coordinated light option available across the app. */
+.learn-app.content-mode.content-light { --ui-bg:#f5f3fb; --ui-surface:#fff; --ui-border:#ded9ec; --ui-ink:#26233b; --ui-muted:#69657d; background:#f5f3fb; color:#26233b; }
+.learn-app.content-mode.content-light .learn-site-header,
+.learn-app.content-mode.content-light .learn-nav { background:#fff; border-color:#e3dfed; }
+.learn-app.content-mode.content-light .learn-site-header .learn-brand,
+.learn-app.content-mode.content-light .breadcrumbs,
+.learn-app.content-mode.content-light .breadcrumbs strong { color:#29263e; }
+.learn-app.content-mode.content-light .learn-nav .side-link { color:#67627c; }
+.learn-app.content-mode.content-light .learn-nav .side-icon { background:#f2effb; color:#7164ce; border-color:#e5e0f6; }
+.learn-app.content-mode.content-light .learn-nav .side-link.active { background:#efedfb; color:#4d43ac; }
+.learn-app.content-mode.content-light .learn-topbar { border-color:#e3dfed; }
+.learn-app.content-mode.content-light .view-panel:not(#homeView) h1,
+.learn-app.content-mode.content-light .view-panel:not(#homeView) h2,
+.learn-app.content-mode.content-light .view-panel:not(#homeView) h3,
+.learn-app.content-mode.content-light .view-panel:not(#homeView) h4 { color:#29263e; }
+.learn-app.content-mode.content-light .view-panel:not(#homeView) p,
+.learn-app.content-mode.content-light .view-panel:not(#homeView) small { color:#69657d; }
+.learn-app.content-mode.content-light .setup-strip,
+.learn-app.content-mode.content-light .language-tool-card,
+.learn-app.content-mode.content-light .resource-card,
+.learn-app.content-mode.content-light .progress-summary article,
+.learn-app.content-mode.content-light .topic-lesson-card,
+.learn-app.content-mode.content-light .topic-progress-card,
+.learn-app.content-mode.content-light .aptitude-quiz-card,
+.learn-app.content-mode.content-light .lesson-note-card,
+.learn-app.content-mode.content-light .lesson-practice-card,
+.learn-app.content-mode.content-light .writing-practice-card { background:#fff; color:#29263e; border-color:#e1ddec; box-shadow:0 10px 25px #4a3b7810; }
+.learn-app.content-mode.content-light .setup-label strong,
+.learn-app.content-mode.content-light .lesson-details strong,
+.learn-app.content-mode.content-light .resource-heading strong,
+.learn-app.content-mode.content-light .resource-row b { color:#29263e; }
+.learn-app.content-mode.content-light .setup-fields select,
+.learn-app.content-mode.content-light .view-panel:not(#homeView) input,
+.learn-app.content-mode.content-light .view-panel:not(#homeView) textarea,
+.learn-app.content-mode.content-light .translator-controls select,
+.learn-app.content-mode.content-light .vocabulary-controls select { background:#fbfaff; color:#29263e; border-color:#dcd7eb; }
+.learn-app.content-mode.content-light .learning-modal,
+.learn-app.content-mode.content-light .practice-modal { background:#fff; color:#29263e; border-color:#e1ddec; }
+.learn-app.content-mode.content-light .learning-modal h2,
+.learn-app.content-mode.content-light .practice-modal h2 { color:#29263e; }
+.learn-app.content-mode.content-light #homeView { color:#29263e; }
+.learn-app.content-mode.content-light #homeView h1,
+.learn-app.content-mode.content-light #homeView h2,
+.learn-app.content-mode.content-light #homeView h3,
+.learn-app.content-mode.content-light #homeView strong { color:#29263e; }
+.learn-app.content-mode.content-light .catalog-card,
+.learn-app.content-mode.content-light .academy-card { background:#fff; color:#29263e; border-color:#ded9ec; }
+.learn-app.content-mode.content-light .catalog-card-body>strong,
+.learn-app.content-mode.content-light .academy-card>strong { color:#29263e; }
+
+/* Setting, hero, language path and lesson cards share the reference page's visual system. */
+.learn-app.content-mode .setup-strip,
+.learn-app.content-mode .language-tool-card,
+.learn-app.content-mode .resource-card,
+.learn-app.content-mode .progress-summary article,
+.learn-app.content-mode .topic-lesson-card,
+.learn-app.content-mode .topic-progress-card,
+.learn-app.content-mode .aptitude-quiz-card,
+.learn-app.content-mode .topic-practice,
+.learn-app.content-mode .lesson-note-card,
+.learn-app.content-mode .lesson-practice-card,
+.learn-app.content-mode .writing-practice-card {
+  color: #f1eff9; background: #12121a; border-color: #292735;
+  box-shadow: 0 12px 30px #00000020;
+}
+.learn-app.content-mode .setup-strip { display: grid; grid-template-columns: minmax(180px,.8fr) minmax(0,1.5fr); gap: 18px; padding: 20px; border-radius: 18px; }
+.learn-app.content-mode .setup-number { background: #24203c; color: #c3baff; }
+.learn-app.content-mode .setup-label strong,
+.learn-app.content-mode .feature-card h3,
+.learn-app.content-mode .feature-card .path-title,
+.learn-app.content-mode .lesson-details strong { color: #f5f3fc; }
+.learn-app.content-mode .setup-label small,
+.learn-app.content-mode .setup-fields label,
+.learn-app.content-mode .lesson-details small,
+.learn-app.content-mode .lesson-duration { color: #aaa6bc; }
+.learn-app.content-mode .setup-fields { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+.learn-app.content-mode .setup-fields select,
+.learn-app.content-mode .session-setup select,
+.learn-app.content-mode .translator-controls select,
+.learn-app.content-mode .vocabulary-controls select,
+.learn-app.content-mode .vocabulary-controls input,
+.learn-app.content-mode .view-panel:not(#homeView) input,
+.learn-app.content-mode .view-panel:not(#homeView) textarea,
+.learn-app.content-mode .writing-practice-card textarea {
+  color: #f1eff9; background: #0c0c13; border-color: #302d40;
+}
+.learn-app.content-mode .setup-fields select:focus,
+.learn-app.content-mode .view-panel:not(#homeView) input:focus,
+.learn-app.content-mode .view-panel:not(#homeView) textarea:focus,
+.learn-app.content-mode .translator-controls select:focus { outline: 2px solid #8272f2; outline-offset: 2px; box-shadow: 0 0 0 4px #8170f326; }
+.learn-app.content-mode .welcome-row.language-welcome { border: 1px solid #302d46; border-radius: 18px; background: #171326; box-shadow: 0 18px 45px #1b153b40; }
+.learn-app.content-mode .section-heading { margin-top: 34px; }
+.learn-app.content-mode .micro-copy { color: #aaa6bc; }
+.learn-app.content-mode .feature-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.learn-app.content-mode .feature-card { min-height: 240px; padding: 24px; border-radius: 18px; background: linear-gradient(135deg,#515fe6,#8265ee); border-color: #756af2; box-shadow: 0 15px 35px #6b5cf133; }
+.learn-app.content-mode .feature-card.soft-feature { background: radial-gradient(circle at 85% 25%,#5c4315 0,transparent 32%),#131218; border-color: #342d22; }
+.learn-app.content-mode .feature-card .feature-tag,
+.learn-app.content-mode .feature-card .feature-meta,
+.learn-app.content-mode .feature-card>p { color: #e0dcff; }
+.learn-app.content-mode .feature-card.soft-feature .feature-tag,
+.learn-app.content-mode .feature-card.soft-feature .feature-meta,
+.learn-app.content-mode .feature-card.soft-feature>p { color: #c5bfad; }
+.learn-app.content-mode .feature-symbol { background: #ffffff26; color: #fff; }
+.learn-app.content-mode .soft-feature .feature-symbol { background: #6b501d50; color: #f5c74e; }
+.learn-app.content-mode .text-action { color: #fff; }
+.learn-app.content-mode .feature-illustration { opacity: .95; }
+.learn-app.content-mode .feature-card:not(.soft-feature) .illus-circle { background: #4a4fbe; }
+.learn-app.content-mode .feature-card:not(.soft-feature) .speech-bubble { background: #fff; color: #6758db; border: 0; box-shadow: 0 8px 22px #33217855; }
+
+.learn-app.content-mode .lesson-list,
+.learn-app.content-mode .soft-skill-grid,
+.learn-app.content-mode .aptitude-groups { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+.learn-app.content-mode .roadmap-layout { grid-template-columns: minmax(0,1fr) 250px; gap: 16px; }
+.learn-app.content-mode .lesson-row,
+.learn-app.content-mode .soft-skill-card,
+.learn-app.content-mode .topic-card { position: relative; display: flex; min-height: 196px; align-items: flex-start; flex-direction: column; gap: 10px; padding: 20px; overflow: hidden; border: 1px solid #383348; border-radius: 19px; background: #15141d; color: #f4f1fb; text-align: left; box-shadow: 0 10px 28px #00000024; transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease; }
+.learn-app.content-mode .lesson-row:hover,
+.learn-app.content-mode .soft-skill-card:hover,
+.learn-app.content-mode .topic-card:hover { transform: translateY(-4px); border-color: #8070ef; box-shadow: 0 16px 32px #20174955; }
+.learn-app.content-mode .lesson-row:nth-child(6n+1),
+.learn-app.content-mode .soft-skill-card:nth-child(6n+1),
+.learn-app.content-mode .topic-card:nth-child(6n+1) { background: linear-gradient(125deg,#211e3b,#15141d 74%); border-color: #484071; }
+.learn-app.content-mode .lesson-row:nth-child(6n+2),
+.learn-app.content-mode .soft-skill-card:nth-child(6n+2),
+.learn-app.content-mode .topic-card:nth-child(6n+2) { background: linear-gradient(125deg,#321a2b,#15141d 74%); border-color: #653250; }
+.learn-app.content-mode .lesson-row:nth-child(6n+3),
+.learn-app.content-mode .soft-skill-card:nth-child(6n+3),
+.learn-app.content-mode .topic-card:nth-child(6n+3) { background: linear-gradient(125deg,#342516,#15141d 74%); border-color: #694713; }
+.learn-app.content-mode .lesson-row:nth-child(6n+4),
+.learn-app.content-mode .soft-skill-card:nth-child(6n+4),
+.learn-app.content-mode .topic-card:nth-child(6n+4) { background: linear-gradient(125deg,#122e2c,#15141d 74%); border-color: #1a625a; }
+.learn-app.content-mode .lesson-row:nth-child(6n+5),
+.learn-app.content-mode .soft-skill-card:nth-child(6n+5),
+.learn-app.content-mode .topic-card:nth-child(6n+5) { background: linear-gradient(125deg,#2b1b3a,#15141d 74%); border-color: #56316c; }
+.learn-app.content-mode .lesson-row:nth-child(6n),
+.learn-app.content-mode .soft-skill-card:nth-child(6n),
+.learn-app.content-mode .topic-card:nth-child(6n) { background: linear-gradient(125deg,#122b3a,#15141d 74%); border-color: #20536c; }
+.learn-app.content-mode .lesson-index,
+.learn-app.content-mode .soft-skill-card .skill-card-icon,
+.learn-app.content-mode .topic-card-icon { width: 54px; height: 54px; border: 0; border-radius: 15px; background: #8074f2; color: #fff; box-shadow: 0 9px 20px #7162e652; }
+.learn-app.content-mode .lesson-row:nth-child(6n+2) .lesson-index { background: #ec50a7; box-shadow: 0 9px 20px #ec50a744; }
+.learn-app.content-mode .lesson-row:nth-child(6n+3) .lesson-index { background: #ff9a1c; box-shadow: 0 9px 20px #ff9a1c44; }
+.learn-app.content-mode .lesson-row:nth-child(6n+4) .lesson-index { background: #18c5a7; box-shadow: 0 9px 20px #18c5a744; }
+.learn-app.content-mode .lesson-row:nth-child(6n+5) .lesson-index { background: #b454ed; box-shadow: 0 9px 20px #b454ed44; }
+.learn-app.content-mode .lesson-row:nth-child(6n) .lesson-index { background: #18b6ea; box-shadow: 0 9px 20px #18b6ea44; }
+.learn-app.content-mode .lesson-type { margin-top: auto; color: #b4a9ff; }
+.learn-app.content-mode .lesson-details { display: contents; }
+.learn-app.content-mode .lesson-details strong { order: 3; width: 100%; white-space: normal; font: 700 19px/1.25 Manrope,sans-serif; }
+.learn-app.content-mode .lesson-details small { order: 4; width: 100%; white-space: normal; font-size: 11px; line-height: 1.55; }
+.learn-app.content-mode .lesson-type { order: 2; }
+.learn-app.content-mode .lesson-duration { position: absolute; top: 17px; right: 17px; padding: 7px 10px; border: 1px solid #554a89; border-radius: 99px; background: #2c2648; color: #d7d0ff; }
+.learn-app.content-mode .lesson-open { position: absolute; right: 17px; bottom: 17px; display: grid; width: 40px; height: 40px; place-items: center; border-radius: 12px; background: #8074f2; color: #fff; font-size: 18px; }
+.learn-app.content-mode .is-complete .lesson-index { background: #1bbd8a; }
+.learn-app.content-mode .resource-card { position: sticky; top: 96px; }
+.learn-app.content-mode .resource-heading,
+.learn-app.content-mode .resource-row { border-color: #2b2937; }
+.learn-app.content-mode .resource-heading strong,
+.learn-app.content-mode .resource-row b { color: #f1eff9; }
+.learn-app.content-mode .resource-heading small,
+.learn-app.content-mode .resource-row small { color: #aaa6bc; }
+
+.learn-app.content-mode .language-tool-card,
+.learn-app.content-mode .soft-hero,
+.learn-app.content-mode .practice-banner,
+.learn-app.content-mode .aptitude-summary,
+.learn-app.content-mode .topic-detail-head,
+.learn-app.content-mode .progress-summary article { border-color: #292735; border-radius: 18px; background: #12121a; }
+.learn-app.content-mode .soft-hero,
+.learn-app.content-mode .practice-banner { background: linear-gradient(120deg,#3937ad,#7868ef); box-shadow: 0 15px 38px #4b43bf35; }
+.learn-app.content-mode .soft-hero h2,
+.learn-app.content-mode .practice-banner h3,
+.learn-app.content-mode .soft-hero p,
+.learn-app.content-mode .practice-banner p { color: #fff; }
+.learn-app.content-mode .vocabulary-card { position: relative; overflow: hidden; padding: 24px; border-color: #3b3454; border-radius: 20px; background: radial-gradient(ellipse at 100% 0%,#30264a 0,transparent 38%),linear-gradient(145deg,#171620,#111119 72%); box-shadow: 0 18px 46px #08070e70; }
+.learn-app.content-mode .vocabulary-card::after { position: absolute; inset: 0 auto 0 0; width: 3px; background: linear-gradient(180deg,#8d7cff,#f2c66d); content: ""; opacity: .85; }
+.learn-app.content-mode .vocabulary-heading { display: flex; align-items: flex-start; gap: 14px; }
+.learn-app.content-mode .vocabulary-heading h2 { color: #f4f1ff; }
+.learn-app.content-mode .vocabulary-heading p { color: #aaa5bc; }
+.learn-app.content-mode .vocabulary-card-icon { display: grid; flex: 0 0 48px; width: 48px; height: 48px; place-items: center; border: 1px solid #7567cc66; border-radius: 15px; background: linear-gradient(145deg,#403577,#28223e); color: #c9bdff; box-shadow: inset 0 1px #ffffff16,0 8px 20px #5e4cb52b; }
+.learn-app.content-mode .vocabulary-card-icon svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.learn-app.content-mode .vocabulary-card .vocabulary-controls { gap: 12px; }
+.learn-app.content-mode .vocabulary-card .vocabulary-controls label { color: #aaa5bc; }
+.learn-app.content-mode .vocabulary-card .vocabulary-controls select,
+.learn-app.content-mode .vocabulary-card .vocabulary-controls input { border-color: #353146; border-radius: 10px; background: #111119; color: #eeeaf8; }
+.learn-app.content-mode .vocabulary-card .vocabulary-word { border-color: #373248; border-radius: 13px; background: linear-gradient(145deg,#201d2b,#171620); transition: transform .24s,border-color .24s,box-shadow .24s; }
+.learn-app.content-mode .vocabulary-card .vocabulary-word:hover { transform: translateY(-3px); border-color: #7162ba; box-shadow: 0 10px 24px #09070f70; }
+.learn-app.content-mode .vocabulary-daily-wrap { margin: 14px 0 12px; }
+.learn-app.content-mode .vocabulary-daily { margin: 0 0 8px; color: #d2c9ff; }
+.learn-app.content-mode .vocabulary-daily-track { height: 6px; overflow: hidden; border-radius: 99px; background: #302b3d; }
+.learn-app.content-mode .vocabulary-daily-track span { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#7968f2,#e8bf68); transition: width .7s cubic-bezier(.22,1,.36,1); }
+.learn-app.content-mode .soft-skill-grid .soft-skill-card { min-height: 205px; }
+.learn-app.content-mode .primary-button,
+.learn-app.content-mode .catalog-cta,
+.learn-app.content-mode .submit-button { border-color: transparent; border-radius: 12px; background: linear-gradient(120deg,#7165ec,#8e7bff); color: #fff; box-shadow: 0 8px 20px #7667f13e; }
+.learn-app.content-mode .primary-button:hover,
+.learn-app.content-mode .catalog-cta:hover,
+.learn-app.content-mode .submit-button:hover { transform: translateY(-2px); box-shadow: 0 12px 25px #7667f155; }
+.learn-app.content-mode .quiet-button,
+.learn-app.content-mode .listen-button,
+.learn-app.content-mode .mode-choice,
+.learn-app.content-mode .topic-filter,
+.learn-app.content-mode .topic-search { border-color: #302d40; background: #171620; color: #d5d0e4; }
+.learn-app.content-mode .mode-choice.selected,
+.learn-app.content-mode .topic-filter.active,
+.learn-app.content-mode .topic-level-tabs button.active,
+.learn-app.content-mode .quiz-option.selected,
+.learn-app.content-mode .placement-option.selected { border-color: #8272f2; background: #2a2448; color: #fff; }
+.learn-app.content-mode .placement-type,
+.learn-app.content-mode .placement-session,
+.learn-app.content-mode .placement-option,
+.learn-app.content-mode .placement-review-item,
+.learn-app.content-mode .vocabulary-word,
+.learn-app.content-mode .writing-studio-feedback,
+.learn-app.content-mode .topic-practice-feedback,
+.learn-app.content-mode .topic-overlap-note,
+.learn-app.content-mode .topic-level-tabs,
+.learn-app.content-mode .quiz-question-count,
+.learn-app.content-mode .transcript-box { background: #171620; border-color: #302d40; color: #eeeaf8; }
+.learn-app.content-mode .placement-type strong,
+.learn-app.content-mode .placement-option,
+.learn-app.content-mode .placement-review-item>strong,
+.learn-app.content-mode .vocabulary-word strong,
+.learn-app.content-mode .grammar-explanation p,
+.learn-app.content-mode .topic-practice-heading h3,
+.learn-app.content-mode .topic-practice-session>strong { color: #eeeaf8; }
+.learn-app.content-mode .grammar-explanation,
+.learn-app.content-mode .topic-practice-session,
+.learn-app.content-mode .session-context { border-color: #302d40; }
+.learn-app.content-mode .grammar-explanation>div>strong,
+.learn-app.content-mode .grammar-reference-links a,
+.learn-app.content-mode .lesson-video-resource a { color: #b8adff; }
+.learn-app.content-mode .lesson-video-resource { border-color: #3c3654; background: #1b1928; }
+.learn-app.content-mode .lesson-video-resource>span,
+.learn-app.content-mode .lesson-video-resource small { color: #aaa6bc; }
+.learn-app.content-mode .modal-backdrop { background: #08070fe0; }
+.learn-app.content-mode .learning-modal,
+.learn-app.content-mode .practice-modal { border-color: #343044; background: #12121b; color: #f4f2fb; box-shadow: 0 30px 100px #000a; }
+.learn-app.content-mode .learning-modal h2,
+.learn-app.content-mode .practice-modal h2 { color: #f5f3fc; }
+.learn-app.content-mode .lesson-note-card,
+.learn-app.content-mode .lesson-practice-card,
+.learn-app.content-mode .writing-practice-card,
+.learn-app.content-mode .topic-practice { background: #171620; border-color: #302d40; }
+.learn-app.content-mode .lesson-note-card ul,
+.learn-app.content-mode .lesson-note-card ol,
+.learn-app.content-mode .lesson-practice-card p,
+.learn-app.content-mode .modal-summary,
+.learn-app.content-mode .practice-modal-head p { color: #c0bbd0; }
+.learn-app.content-mode .modal-close { border-color: #39364a; background: #1b1a24; color: #c7c2d4; }
+.learn-app.content-mode .toast { border-color: #38334f; background: #1a1825; color: #e7e0ff; }
+.learn-app.content-mode .view-panel:not(#homeView) .primary-button:focus-visible,
+.learn-app.content-mode .view-panel:not(#homeView) button:focus-visible,
+.learn-app.content-mode .learning-modal button:focus-visible,
+.learn-app.content-mode .practice-modal button:focus-visible { outline: 2px solid #a99cff; outline-offset: 3px; }
+.learn-app.content-mode .view-panel:not(#homeView) .section-entering { animation-duration: .52s; }
+.learn-app.content-mode .lesson-row,
+.learn-app.content-mode .soft-skill-card,
+.learn-app.content-mode .topic-card { animation: contentCardIn .48s cubic-bezier(.22,1,.36,1) both; }
+.learn-app.content-mode .lesson-row:nth-child(2),
+.learn-app.content-mode .soft-skill-card:nth-child(2),
+.learn-app.content-mode .topic-card:nth-child(2) { animation-delay: .06s; }
+.learn-app.content-mode .lesson-row:nth-child(3),
+.learn-app.content-mode .soft-skill-card:nth-child(3),
+.learn-app.content-mode .topic-card:nth-child(3) { animation-delay: .12s; }
+.learn-app.content-mode .lesson-row:nth-child(4),
+.learn-app.content-mode .soft-skill-card:nth-child(4),
+.learn-app.content-mode .topic-card:nth-child(4) { animation-delay: .18s; }
+@keyframes contentCardIn { from { opacity: .25; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+@media (max-width: 980px) {
+  .learn-app.content-mode .roadmap-layout { grid-template-columns: 1fr; }
+  .learn-app.content-mode .resource-card { position: static; display: grid; grid-template-columns: 1fr 1fr; column-gap: 14px; }
+  .learn-app.content-mode .resource-heading,
+  .learn-app.content-mode .all-resources { grid-column: 1/-1; }
+}
+@media (max-width: 760px) {
+  .learn-app.content-mode .learn-nav { inset: 67px auto 0 0; width: 62px; padding: 14px 6px; }
+  .learn-app.content-mode .learn-main { width: calc(100% - 62px); margin: 0 0 0 62px; padding: 0 14px 38px; }
+  body.sidebar-collapsed .learn-app.content-mode .learn-nav { width: 62px; padding: 14px 6px; }
+  body.sidebar-collapsed .learn-app.content-mode .learn-main { width: 100%; margin: 0; padding-inline: 15px; }
+  .learn-app.content-mode .learn-nav .side-icon { display: grid; }
+  .learn-app.content-mode .learn-site-header { grid-template-columns: 36px minmax(0,1fr) auto 36px; grid-template-rows: 54px; }
+  .learn-app.content-mode .setup-strip { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .learn-app.content-mode .feature-grid,
+  .learn-app.content-mode .lesson-list,
+  .learn-app.content-mode .soft-skill-grid,
+  .learn-app.content-mode .aptitude-groups { grid-template-columns: 1fr; }
+  .learn-app.content-mode .setup-fields { grid-template-columns: 1fr; }
+  .learn-app.content-mode .lesson-row { min-height: 180px; }
+  .learn-app.content-mode .resource-card { display: block; }
+  .learn-app.content-mode .practice-banner { align-items: flex-start; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .learn-app.content-mode .lesson-row,
+  .learn-app.content-mode .soft-skill-card,
+  .learn-app.content-mode .topic-card { animation: none; transition: none; }
+}

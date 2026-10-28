@@ -2,22 +2,23 @@
   const app = document.querySelector('.learn-app');
   if (!app) return;
   const themeToggle = document.querySelector('#themeToggle');
-  const savedTheme = localStorage.getItem('northstar-catalog-theme');
+  const savedTheme = localStorage.getItem('northstar-violet-theme');
   const applyTheme = theme => {
     const isLight = theme === 'light';
+    app.classList.toggle('content-light', isLight);
     document.body.dataset.theme = isLight ? 'light' : 'dark';
     const themeColor = document.querySelector('meta[name="theme-color"]');
     if (themeColor) themeColor.content = isLight ? '#f2f4f7' : '#0b1220';
     if (!themeToggle) return;
     themeToggle.setAttribute('aria-pressed', String(isLight));
     themeToggle.setAttribute('aria-label', `Switch to ${isLight ? 'dark' : 'light'} mode`);
-    themeToggle.querySelector('.theme-toggle-icon').textContent = isLight ? '☾' : '☀';
+    themeToggle.querySelector('.theme-toggle-icon').innerHTML = `<svg aria-hidden="true"><use href="/static/icons.svg?v=northstar-icons-20261028-2#icon-${isLight ? 'moon' : 'sun'}"></use></svg>`;
     themeToggle.querySelector('.theme-toggle-label').textContent = isLight ? 'Dark mode' : 'Light mode';
   };
-  applyTheme(savedTheme === 'dark' ? 'dark' : 'light');
+  applyTheme(savedTheme === 'light' ? 'light' : 'dark');
   themeToggle?.addEventListener('click', () => {
     const nextTheme = document.body.dataset.theme === 'light' ? 'dark' : 'light';
-    localStorage.setItem('northstar-catalog-theme', nextTheme);
+    localStorage.setItem('northstar-violet-theme', nextTheme);
     applyTheme(nextTheme);
   });
   const catalogSearch = document.querySelector('#catalogSearch');
@@ -129,8 +130,85 @@
   let timerId = null;
   let sessionSeconds = 0;
   let recognition = null;
+  let situationRecognition = null;
+  let activePracticeSituation = '';
   let sessionActive = false;
   let speechStartedAt = 0;
+  const placementQuiz = [
+    ['She ___ to work by bus every day.',['go','goes','going','is go'],1,'With he, she or it in the present simple, add -s to the verb.'],
+    ['We ___ dinner when the lights went out.',['have','are having','were having','has'],2,'The past continuous describes an action in progress when another past event happened.'],
+    ['I have lived here ___ 2022.',['for','since','during','from'],1,'Use since with a starting point in time; use for with a duration.'],
+    ['Choose the correct question.',['Where you live?','Where do you live?','Where does you live?','Where are live you?'],1,'Use do + subject + base verb for a present simple question with you.'],
+    ['If I ___ more time, I would learn another language.',['have','had','will have','am having'],1,'The second conditional uses if + past simple, then would + base verb.'],
+    ['The report ___ by the team yesterday.',['finished','was finished','has finish','is finishing'],1,'Use was + past participle for a past passive sentence.'],
+    ['She is interested ___ learning Japanese.',['on','at','in','for'],2,'The usual phrase is interested in + noun or gerund.'],
+    ['I look forward to ___ from you.',['hear','hearing','heard','be hear'],1,'In look forward to, to is a preposition, so it takes a gerund.'],
+    ['Choose the closest meaning of “reliable”.',['Easy to forget','Can be trusted','Very expensive','Recently made'],1,'Reliable means dependable or able to be trusted.'],
+    ['We need to ___ a decision before Friday.',['do','make','take up','put'],1,'The natural collocation is make a decision.'],
+    ['By next June, they ___ the course.',['complete','will have completed','completed','are complete'],1,'Future perfect describes something finished before a future time.'],
+    ['There are ___ people in the room than before.',['less','few','fewer','little'],2,'Use fewer with countable plural nouns such as people.'],
+    ['Despite ___ tired, he finished the presentation.',['be','being','was','to be'],1,'A preposition such as despite is followed by a noun or gerund.'],
+    ['Choose the natural sentence.',['I am agree with you.','I agree with you.','I agreeing with you.','I do agreed with you.'],1,'Agree is a verb; it does not take am in this sentence.'],
+    ['The meeting was ___ because the manager was ill.',['called off','called up','called in','called out'],0,'Call off means cancel.'],
+    ['She asked me where ___.',['was the station','the station was','is the station','the station is it'],1,'In an indirect question, use statement word order: subject before verb.'],
+    ['You ___ wear a seat belt; it is the law.',['might','must','would','could'],1,'Must expresses a strong obligation.'],
+    ['I wish I ___ speak French fluently.',['can','will','could','am able'],2,'Use wish + past form to describe a present ability you do not have.'],
+    ['The new policy will ___ everyone in the department.',['effect','affect','effective','affection'],1,'Affect is the verb meaning to influence.'],
+    ['Not only ___ late, but he also forgot the documents.',['he arrived','did he arrive','he did arrive','arrived he'],1,'After fronted not only, use auxiliary + subject inversion.']
+  ].map(([q, options, answer, why]) => ({q, options, answer, why}));
+  const placementSentences = [
+    ['Which sentence describes a regular routine?',['I usually walk to work.','I usually walks to work.','Usually I am walk to work.','I walk usually yesterday to work.'],0,'Use the base verb with I for a present simple routine.'],
+    ['Which sentence describes an action happening now?',['She talks on the phone now.','She is talking on the phone now.','She talking on the phone now.','She are talking on the phone now.'],1,'Use am/is/are + verb-ing for an action happening now.'],
+    ['Which sentence correctly describes yesterday?',['We visit the museum yesterday.','We visited the museum yesterday.','We have visit the museum yesterday.','We were visit the museum yesterday.'],1,'Use the past simple with a finished time such as yesterday.'],
+    ['Which sentence uses a starting point in time?',['I have worked here since 2022.','I have worked here for 2022.','I work here since 2022.','I am working here since 2022.'],0,'Use since before a starting point.'],
+    ['Which is a correctly formed question?',['Where you bought that book?','Where did you buy that book?','Where did you bought that book?','Where bought you that book?'],1,'Use did + subject + base verb in a past simple question.'],
+    ['Which sentence has a correct negative form?',['He does not likes coffee.','He do not like coffee.','He does not like coffee.','He not like coffee.'],2,'After does not, use the base verb.'],
+    ['Which sentence gives polite advice?',['You should to rest today.','You should rest today.','You should resting today.','You should rested today.'],1,'A modal such as should is followed by the base verb.'],
+    ['Which sentence uses the passive correctly?',['The bridge built in 1990.','The bridge was built in 1990.','The bridge was build in 1990.','The bridge is builded in 1990.'],1,'The past passive uses was/were + past participle.'],
+    ['Which sentence expresses an unreal possibility?',['If I had more time, I would travel.','If I have more time, I would travelled.','If I will have time, I travel.','If I had more time, I will travelled.'],0,'Use if + past simple, then would + base verb for this second conditional.'],
+    ['Which sentence is correct after “I look forward to”?',['I look forward to meet you.','I look forward meeting you.','I look forward to meeting you.','I look forward to met you.'],2,'Here, to is a preposition, so use a gerund.'],
+    ['Which is a correct indirect question?',['Could you tell me where is the station?','Could you tell me where the station is?','Could you tell me where does the station be?','Could you tell where the station?'],1,'Indirect questions use statement word order.'],
+    ['Which sentence correctly compares two groups of people?',['There are less students today.','There are fewer students today.','There is fewer students today.','There are fewest students than today.'],1,'Use fewer with countable plural nouns.'],
+    ['Which sentence uses a relative pronoun correctly?',['The woman which called is my manager.','The woman who called is my manager.','The woman whose called is my manager.','The woman who she called is my manager.'],1,'Use who for a person performing the action.'],
+    ['Which sentence uses an article naturally?',['She is an university student.','She is a university student.','She is university student.','She is the university student by profession.'],1,'University begins with a “you” consonant sound, so use a.'],
+    ['Which sentence places the adverb naturally?',['He carefully checked the figures.','He checked carefully the figures.','Carefully he the figures checked.','He the figures checked carefully them.'],0,'The adverb naturally comes before the main verb here.'],
+    ['Which sentence uses contrast correctly?',['Although it was raining, we went for a walk.','Although it was raining, but we went for a walk.','Despite it was raining, we went for a walk.','Although raining, we went for a walk it.'],0,'Although introduces a clause; do not add but to the same clause.'],
+    ['Which sentence correctly uses “already”?',['I have already sent the email.','I already have send the email.','I have send already the email.','I am already sent the email.'],0,'Use have + past participle, with already before the participle phrase.'],
+    ['Which sentence reports a past statement correctly?',['She said that she was tired.','She said that she is tired yesterday.','She said me that tired.','She told that she was tired to me.'],0,'Say + that-clause reports the statement; backshift is common in past reporting.'],
+    ['Which sentence uses the future perfect?',['By June, I will finish the course.','By June, I will have finished the course.','By June, I have finished the course.','By June, I will be finish the course.'],1,'Use will have + past participle for an action completed before a future time.'],
+    ['Which sentence correctly uses “not only”?',['Not only she arrived late, but she forgot her notes.','Not only did she arrive late, but she also forgot her notes.','Not only did she arrived late, but forgot notes.','Not only she did arrive late but also forgot notes.'],1,'Fronted not only takes auxiliary-subject inversion.']
+  ].map(([q, options, answer, why]) => ({q, options, answer, why}));
+  const placementConversation = [
+    ['You meet a new colleague. How do you introduce yourself?',['What are you doing here?','Hi, I’m Sam. I’ve just joined the design team.','You must know my name.','I am called by Sam yesterday.'],1,'A friendly greeting and a short introduction fit a first meeting.'],
+    ['A friend says, “Would you like some tea?” You want some.',['Yes, I would, please.','I like tea yesterday.','You must tea.','No, I am.'],0,'“Yes, I would, please” is a polite response to an offer.'],
+    ['You did not hear a name. What is a polite reply?',['Speak again now.','Could you say your name again, please?','What name you said?','I don’t listen.'],1,'Ask politely with could you and a clear request.'],
+    ['You arrive 10 minutes late. What should you say?',['You waited too long.','Sorry I’m late; thank you for waiting.','I late because traffic.','Forget the time.'],1,'Apologise briefly and acknowledge the other person’s time.'],
+    ['A shop assistant asks if you need help. You are browsing.',['No, thank you. I’m just looking.','I look you.','Help is not.','I am seeing.'],0,'This is the natural polite way to say you do not need help yet.'],
+    ['You want directions to the station.',['Station where going?','Excuse me, could you tell me how to get to the station?','You tell station now.','I want station yesterday.'],1,'A polite opening plus could you tell me makes a clear request.'],
+    ['Your classmate explains an idea. You want clarification.',['What do you mean by that? Could you give an example?','That is bad.','Stop talking.','I not know it.'],0,'A focused clarification request keeps the conversation constructive.'],
+    ['You disagree in a meeting.',['That makes no sense.','I see your point. Could we also consider another option?','You are wrong always.','No, because.'],1,'Acknowledge the view, then offer another perspective respectfully.'],
+    ['A colleague helped you finish a task.',['You had to do that.','Thanks for your help; it made a real difference.','I finished because you.','Good, leave.'],1,'A specific thank-you clearly recognises the help.'],
+    ['You need more time for a deadline.',['I cannot do it.','Could we move the deadline to Thursday? I need one more day to check the figures.','Deadline is wrong.','Maybe later.'],1,'Make a clear request and give a short reason.'],
+    ['Someone asks, “How was your weekend?”',['It was relaxing, thanks. I visited my cousins.','Weekend is two days.','I am weekend.','You ask me yesterday.'],0,'Answer the question and add one relevant detail.'],
+    ['You want to join a conversation.',['Can I add something to that point?','You stop now.','I speaking after.','Listen for me.'],0,'This phrase politely signals that you would like to contribute.'],
+    ['You made a mistake in a shared document.',['I didn’t do anything.','I spotted an error in my section and have corrected it.','Someone has to fix that.','It is not important.'],1,'Take responsibility and state what you did to fix it.'],
+    ['A customer is upset about a delay.',['That is not my problem.','I understand the delay is frustrating. I’ll check the status and update you by 3 p.m.','Calm down first.','Wait here.'],1,'Recognise the concern and give a specific next step and time.'],
+    ['You need to end a conversation politely.',['I have to go now. It was lovely speaking with you.','Leave me.','This is finished.','I go.'],0,'A brief reason and a warm closing make a polite ending.'],
+    ['You are unsure about an instruction.',['I’ll start, but could you clarify which file to use?','I don’t do unclear tasks.','You explain badly.','I guess any file.'],0,'Ask a specific question before acting on an unclear instruction.'],
+    ['A friend shares good news.',['That sounds wonderful—congratulations!','Why tell me?','It is normal.','I heard something.'],0,'A positive acknowledgement and congratulations suit good news.'],
+    ['You want to suggest a meeting time.',['Are you free to meet on Tuesday afternoon?','We meet Tuesday now.','You have Tuesday.','Meeting is Tuesday, yes?'],0,'A direct but polite question checks the other person’s availability.'],
+    ['You did not understand a joke.',['I don’t get it—what does that mean?','That is not funny.','Explain all now.','I am not understanding yesterday.'],0,'An honest, neutral clarification keeps the interaction comfortable.'],
+    ['You finish speaking and want the other person’s view.',['That is my view. What do you think?','I finished, go.','You agree with me.','No more questions.'],0,'Invite the other person to respond with an open question.']
+  ].map(([q, options, answer, why]) => ({q, options, answer, why}));
+  let placement = null;
+  const vocabularyWords = [
+    ['People','colleague','a person you work with','My colleague helped me prepare for the meeting.'],['People','neighbour','a person living near you','Our neighbour speaks three languages.'],['People','customer','a person who buys a product or service','The customer asked for more information.'],['People','audience','the people watching or listening','The audience asked thoughtful questions.'],['People','relative','a person in your family','A relative is visiting us this weekend.'],
+    ['Everyday','appointment','an arranged time to meet someone','I have a dentist appointment at noon.'],['Everyday','nearby','not far away','There is a pharmacy nearby.'],['Everyday','borrow','to use something and return it later','May I borrow your umbrella?'],['Everyday','enough','as much or as many as needed','We have enough time to review this.'],['Everyday','usually','most of the time','I usually walk to the station.'],
+    ['Travel','platform','the area beside a railway track where passengers wait','Our train leaves from platform four.'],['Travel','reservation','an arrangement to keep a seat or room','I made a reservation for two nights.'],['Travel','luggage','bags and cases used while travelling','Please keep your luggage with you.'],['Travel','destination','the place someone is travelling to','Kyoto is our final destination.'],['Travel','boarding','getting onto a plane, ship or train','Boarding begins in twenty minutes.'],
+    ['Work','deadline','the latest time something must be finished','The deadline for the draft is Friday.'],['Work','feedback','comments that help someone improve','Her feedback helped me make the report clearer.'],['Work','prioritise','to decide what is most important first','Let’s prioritise the urgent customer requests.'],['Work','schedule','a plan showing when things will happen','I’ll check my schedule and confirm.'],['Work','collaborate','to work together with other people','The teams collaborate on product research.'],
+    ['Study','review','to study something again','I review new words before the lesson.'],['Study','evidence','information that helps show whether something is true','The essay uses evidence from two studies.'],['Study','summarise','to give the main points briefly','Can you summarise the chapter in a few lines?'],['Study','assignment','a piece of work given to a student','Our assignment is due next Monday.'],['Study','accurate','correct and free from mistakes','Check that the dates are accurate.'],
+    ['Feelings','confident','feeling sure about your ability','I feel more confident after practising.'],['Feelings','relieved','feeling less worried after difficulty','She was relieved when the exam ended.'],['Feelings','curious','wanting to learn or know more','The children were curious about the map.'],['Feelings','frustrated','annoyed because something is difficult','I felt frustrated but tried another method.'],['Feelings','grateful','feeling thankful','I’m grateful for your patient explanation.']
+  ].map(([category, word, meaning, example]) => ({category, word, meaning, example}));
   const prompts = {
     free: ['Hi! Let’s practise English today. Tell me one small thing that made you smile recently.','What is something you are looking forward to this week?','Tell me about a place you would like to visit and why.'],
     guided: ['Hi! Let’s practise English today. Tell me about your day.','What is one thing you learned recently? How did you learn it?','What would you like to feel more confident doing next week?'],
@@ -147,7 +225,7 @@
     'Other':'What would you like to practise today? Start wherever feels comfortable.'
   };
   function getCourse(targetLevel=level) {
-    if (language.toLowerCase() === 'english') return levels[targetLevel];
+    if (language.toLowerCase() === 'english') return window.NORTHSTAR_ENGLISH_GRAMMAR?.[targetLevel] || levels[targetLevel];
     const commonNotes = [
       [`Start with a complete phrase in ${language}, then repeat it at a comfortable pace.`,`Notice which part of the phrase carries the main meaning.`,`Practise the phrase in a real situation instead of memorising it alone.`],
       [`Connect two ideas with a natural pause or a linking phrase in ${language}.`,`Give a short answer first, then add one reason or example.`,`Listen to a native-speaker example and repeat the whole phrase.`],
@@ -174,6 +252,12 @@
     await saveProfile();
   }
   function refreshLanguage() {
+    const englishCourse = language.toLowerCase() === 'english';
+    const previousLevel = level;
+    $('#levelSelect').disabled = !englishCourse;
+    if (!englishCourse) { level = 'Basic'; $('#levelSelect').value = 'Basic'; }
+    else $('#levelSelect').value = level;
+    if (!englishCourse && previousLevel !== 'Basic') saveProfile(true);
     $('#languageFeatureTitle').textContent=language;
     $$('.target-language-inline').forEach(node=>node.textContent=language);
     $('#videoLanguageLabel').textContent=language;
@@ -188,8 +272,57 @@
   languageSelect.innerHTML=languages.map(([name])=>name==='Other language'?'<option value="__other__">Other language…</option>':`<option>${safeText(name)}</option>`).join('');
   if (languages.some(item=>item[0].toLowerCase()===language.toLowerCase())) languageSelect.value=languages.find(item=>item[0].toLowerCase()===language.toLowerCase())[0];
   else { languageSelect.value='__other__'; $('#customLanguage').value=language; $('#customLanguage').hidden=false; }
-  languageSelect.addEventListener('change',applyLanguageSelection);
-  $('#customLanguage').addEventListener('change',async event=>{const value=event.target.value.trim();if(!value)return;language=value;const match=languages.find(item=>item[0].toLowerCase()===value.toLowerCase());languageCode=match?.[1]||'';languageLocale=match?.[2]||'en-US';refreshLanguage();await saveProfile();});
+  const languageFlags={'Arabic':'🇸🇦','Bengali':'🇧🇩','Chinese (Mandarin)':'🇨🇳','Dutch':'🇳🇱','English':'🇬🇧','French':'🇫🇷','German':'🇩🇪','Greek':'🇬🇷','Gujarati':'🇮🇳','Hebrew':'🇮🇱','Hindi':'🇮🇳','Indonesian':'🇮🇩','Italian':'🇮🇹','Japanese':'🇯🇵','Kannada':'🇮🇳','Korean':'🇰🇷','Malayalam':'🇮🇳','Marathi':'🇮🇳','Nepali':'🇳🇵','Persian':'🇮🇷','Polish':'🇵🇱','Portuguese':'🇵🇹','Punjabi':'🇮🇳','Russian':'🇷🇺','Spanish':'🇪🇸','Swahili':'🇰🇪','Tamil':'🇮🇳','Telugu':'🇮🇳','Thai':'🇹🇭','Turkish':'🇹🇷','Ukrainian':'🇺🇦','Urdu':'🇵🇰','Vietnamese':'🇻🇳'};
+  const languageHints={'English':'Build clear, natural English','Spanish':'Hola, ¿cómo estás?','French':'Bonjour !','German':'Hallo!','Japanese':'こんにちは','Chinese (Mandarin)':'你好','Hindi':'नमस्ते','Other language':'Add your own language'};
+  const languagePicker=$('#languagePicker'), languageMenu=$('#languagePickerMenu'), languageTrigger=$('#languagePickerTrigger'), languageOptions=$('#languagePickerOptions'), languageSearch=$('#languagePickerSearch'), languageMore=$('#languagePickerMore');
+  let showAllLanguages=false;
+  function renderLanguagePicker(filter='') {
+    const current=languageSelect.value==='__other__'?(language==='Other language'?'Other language':language):languageSelect.value;
+    const normalized=filter.trim().toLocaleLowerCase();
+    const featuredLanguages=['English','Spanish','French','German','Japanese','Chinese (Mandarin)'];
+    const entries=languages.filter(([name])=>name!=='Other language'||showAllLanguages||normalized).filter(([name])=>!normalized||name.toLocaleLowerCase().includes(normalized)).sort((a,b)=>{const ai=featuredLanguages.indexOf(a[0]),bi=featuredLanguages.indexOf(b[0]);return (ai<0?99:ai)-(bi<0?99:bi)||a[0].localeCompare(b[0]);});
+    const visible=normalized||showAllLanguages?entries:entries.slice(0,6);
+    languageOptions.innerHTML=visible.map(([name])=>{const flag=languageFlags[name]||'🌐';const hint=languageHints[name]||`Start learning ${name}`;const selected=name===current;return `<button class="language-option${selected?' is-selected':''}" type="button" role="option" aria-selected="${selected}" data-language-option="${safeText(name)}"><span class="language-option-flag">${flag}</span><span class="language-option-copy"><strong>${safeText(name)}</strong><small>${safeText(hint)}</small></span><span class="language-option-arrow">›</span></button>`;}).join('')||'<p class="language-picker-empty">No languages found. Try another search.</p>';
+    languageMore.hidden=!!normalized||languages.length<=6||showAllLanguages;
+  }
+  function syncLanguagePicker() {
+    const selected=languageSelect.value==='__other__'?(language==='Other language'?'Other language':language):languageSelect.value;
+    $('#languageCurrentFlag').textContent=languageFlags[selected]||'🌐';
+    $('#languageCurrentName').textContent=selected;
+    $('#languageCurrentHint').textContent=languageHints[selected]||`Start learning ${selected}`;
+    renderLanguagePicker(languageSearch.value);
+  }
+  renderLanguagePicker(); syncLanguagePicker();
+  const languageScene=$('#languageScene');
+  if(languageScene){
+    const imageUrl=$('.language-scene-image',languageScene).getAttribute('src');
+    const layerBase=imageUrl.slice(0,imageUrl.lastIndexOf('/')+1)+'layers/';
+    const motionParts=[
+      {name:'robot',box:[57.3,14.5,12.2,74],duration:5.8,delay:-1,x:'2px',y:'-5px',tilt:'-.45deg'},
+      {name:'great-job-bubble',box:[69.8,11.5,8.7,25],duration:4.4,delay:-2,x:'-2px',y:'-5px',tilt:'-.7deg'},
+      {name:'checklist',box:[71,42,9.5,45],duration:5.2,delay:-4,x:'2px',y:'-3px',tilt:'.25deg'},
+      {name:'hello-left-bubble',box:[43,9,6.5,16],duration:4.8,delay:-1.5,x:'-2px',y:'-5px',tilt:'.7deg'},
+      {name:'namaste-bubble',box:[48.3,31,6.5,16],duration:5,delay:-.8,x:'2px',y:'-5px',tilt:'.6deg'},
+      {name:'hola-bubble',box:[43.2,53.5,6.2,15.5],duration:4.6,delay:-2.6,x:'-2px',y:'-5px',tilt:'-.6deg'},
+      {name:'bonjour-bubble',box:[47.2,75,8.6,17.5],duration:4.7,delay:-1.2,x:'-2px',y:'-5px',tilt:'-.6deg'},
+      {name:'hello-right-bubble',box:[88.2,10,7,16.5],duration:4.2,delay:-2.3,x:'-2px',y:'-5px',tilt:'-.6deg'},
+      {name:'japanese-bubble',box:[87,38,10.5,19],duration:5.6,delay:-4,x:'2px',y:'-5px',tilt:'.6deg'},
+      {name:'chinese-bubble',box:[87.8,68,6.7,17],duration:4.5,delay:-2.7,x:'-2px',y:'-5px',tilt:'-.7deg'},
+      {name:'left-sparkle',box:[41.8,89,1.2,5],duration:3.9,delay:-.5,x:'1px',y:'-4px',tilt:'0deg'},
+      {name:'mid-sparkle',box:[55.7,11,1.5,5],duration:4.3,delay:-2,x:'-1px',y:'-3px',tilt:'0deg'},
+      {name:'right-sparkle',box:[85,82,1.5,5],duration:4.1,delay:-1.6,x:'1px',y:'-4px',tilt:'0deg'}
+    ];
+    const layers=$('.language-motion-parts',languageScene);
+    motionParts.forEach(part=>{const layer=document.createElement('div');layer.className=`language-motion-part motion-${part.name}`;layer.style.left=`${part.box[0]}%`;layer.style.top=`${part.box[1]}%`;layer.style.width=`${part.box[2]}%`;layer.style.height=`${part.box[3]}%`;layer.style.backgroundImage=`url("${layerBase}${part.name}.png?v=20261027-v4")`;layer.style.animationDuration=`${part.duration}s`;layer.style.animationDelay=`${part.delay}s`;layer.style.setProperty('--part-x',part.x);layer.style.setProperty('--part-y',part.y);layer.style.setProperty('--part-tilt',part.tilt);layers.append(layer);});
+  }
+  languageTrigger.addEventListener('click',()=>{const open=languageTrigger.getAttribute('aria-expanded')==='true';languageMenu.hidden=open;languageTrigger.setAttribute('aria-expanded',String(!open));if(!open){renderLanguagePicker(languageSearch.value);languageSearch.focus();}});
+  languageOptions.addEventListener('click',event=>{const option=event.target.closest('[data-language-option]');if(!option)return;const name=option.dataset.languageOption;languageSelect.value=name==='Other language'?'__other__':name;languageMenu.hidden=true;languageTrigger.setAttribute('aria-expanded','false');languageSearch.value='';showAllLanguages=false;syncLanguagePicker();languageSelect.dispatchEvent(new Event('change',{bubbles:true}));});
+  languageSearch.addEventListener('input',()=>renderLanguagePicker(languageSearch.value));
+  languageMore.addEventListener('click',()=>{showAllLanguages=true;renderLanguagePicker();languageOptions.scrollTop=0;languageSearch.focus();});
+  languageSelect.addEventListener('change',()=>{syncLanguagePicker();applyLanguageSelection();});
+  document.addEventListener('click',event=>{if(!languagePicker.contains(event.target)){languageMenu.hidden=true;languageTrigger.setAttribute('aria-expanded','false');}});
+  languagePicker.addEventListener('keydown',event=>{if(event.key==='Escape'){languageMenu.hidden=true;languageTrigger.setAttribute('aria-expanded','false');languageTrigger.focus();}});
+  $('#customLanguage').addEventListener('change',async event=>{const value=event.target.value.trim();if(!value)return;language=value;const match=languages.find(item=>item[0].toLowerCase()===value.toLowerCase());languageCode=match?.[1]||'';languageLocale=match?.[2]||'en-US';syncLanguagePicker();refreshLanguage();await saveProfile();});
 
   function showToast(message) {
     const toast = $('#toast'); toast.textContent = message; toast.classList.add('show');
@@ -253,9 +386,9 @@
     sidebarToggle?.setAttribute('aria-expanded', String(!collapsed));
     sidebarToggle?.setAttribute('aria-label', collapsed ? 'Show sidebar' : 'Hide sidebar');
   }
-  setSidebarCollapsed(mobileLayout.matches);
+  setSidebarCollapsed(false);
   sidebarToggle?.addEventListener('click', () => setSidebarCollapsed(!document.body.classList.contains('sidebar-collapsed')));
-  mobileLayout.addEventListener?.('change', event => setSidebarCollapsed(event.matches));
+  mobileLayout.addEventListener?.('change', event => { if (!event.matches) setSidebarCollapsed(false); });
   const carousel = $('#dashboardCarousel');
   if (carousel) {
     const slides = $$('.dashboard-slide', carousel);
@@ -299,6 +432,139 @@
   }
   $$('.side-link,[data-section]').forEach(button => button.addEventListener('click', () => switchSection(button.dataset.section)));
   $$('.text-action[data-scroll]').forEach(button => button.addEventListener('click', () => document.getElementById(button.dataset.scroll).scrollIntoView({behavior:'smooth',block:'start'})));
+
+  function renderPlacementQuestion() {
+    if (!placement) return;
+    const item = placement.items[placement.index];
+    $('#placementModeLabel').textContent = `${placement.label} · ENGLISH`;
+    $('#placementQuestionTitle').textContent = `Question ${placement.index + 1} of ${placement.items.length}`;
+    $('#placementProgressFill').style.width = `${((placement.index + 1) / placement.items.length) * 100}%`;
+    $('#placementStem').textContent = item.q;
+    $('#placementOptions').innerHTML = item.options.map((option, index) => `<button class="placement-option${placement.answers[placement.index] === index ? ' selected' : ''}" type="button" data-placement-option="${index}"><span>${String.fromCharCode(65 + index)}</span>${safeText(option)}</button>`).join('');
+    $('#placementOptions').querySelectorAll('[data-placement-option]').forEach(button => button.addEventListener('click', () => {
+      placement.answers[placement.index] = Number(button.dataset.placementOption);
+      $('#placementOptions').querySelectorAll('.placement-option').forEach(option => option.classList.toggle('selected', option === button));
+      $('#placementNext').disabled = false;
+      $('#placementStatus').textContent = 'Answer saved for this question.';
+    }));
+    $('#placementNext').textContent = placement.index === placement.items.length - 1 ? 'Submit test →' : 'Next question →';
+    $('#placementNext').disabled = placement.answers[placement.index] === null;
+    $('#placementStatus').textContent = placement.answers[placement.index] === null ? 'Choose an answer to continue.' : 'Answer saved for this question.';
+  }
+  function finishPlacement() {
+    const score = placement.items.reduce((sum, item, index) => sum + (placement.answers[index] === item.answer ? 1 : 0), 0);
+    const suggested = score >= 16 ? 'Advanced' : score >= 9 ? 'Intermediate' : 'Basic';
+    const review = placement.items.map((item, index) => {
+      const chosen = placement.answers[index];
+      const correct = chosen === item.answer;
+      return `<article class="placement-review-item ${correct ? 'is-correct' : 'is-incorrect'}"><strong>${index + 1}. ${safeText(placement.kind === 'sentences' ? item.q : item.q)}</strong><p>Your answer: ${chosen === null ? 'Not answered' : safeText(item.options[chosen])}</p>${!correct ? `<p>Correct answer: ${safeText(item.options[item.answer])}</p>` : ''}<small>${safeText(item.why)}</small></article>`;
+    }).join('');
+    $('#placementResults').innerHTML = `<div class="placement-result-summary"><strong>${score} / 20</strong><span>Suggested starting level: <b>${suggested}</b></span><button type="button" class="quiet-button" id="applySuggestedLevel">Use ${suggested} level</button></div><p>Review every answer below. This is a short English placement estimate, not a formal proficiency certificate.</p><div class="placement-review-list">${review}</div>`;
+    $('#placementResults').hidden = false;
+    $('#placementNext').hidden = true;
+    $('#placementOptions').hidden = true;
+    $('#placementStem').hidden = true;
+    $('#placementStatus').textContent = `Test complete · ${score} correct out of 20.`;
+    $('#applySuggestedLevel').addEventListener('click', async () => {
+      level = suggested; $('#levelSelect').value = level; refreshLanguage(); await saveProfile();
+      showToast(`Your learning level is now ${level}.`);
+    });
+  }
+  $$('.placement-type').forEach(button => button.addEventListener('click', () => {
+    const kind = button.dataset.placement;
+    const englishOnly = languageCode === 'en';
+    if (!englishOnly) { showToast('Reviewed placement tests are currently available for English only.'); return; }
+    const items = kind === 'conversation' ? placementConversation : kind === 'sentences' ? placementSentences : placementQuiz;
+    placement = {kind, label:kind === 'quiz' ? 'Grammar & vocabulary' : kind === 'sentences' ? 'Sentence building' : 'Conversation choices', items, index:0, answers:Array(items.length).fill(null)};
+    $('#placementSession').hidden = false; $('#placementResults').hidden = true; $('#placementNext').hidden = false;
+    $('#placementOptions').hidden = false; $('#placementStem').hidden = false;
+    $('#placementSession').scrollIntoView({behavior:'smooth', block:'start'}); renderPlacementQuestion();
+  }));
+  $('#placementNext').addEventListener('click', () => {
+    if (!placement || placement.answers[placement.index] === null) return;
+    if (placement.index === placement.items.length - 1) finishPlacement();
+    else { placement.index++; renderPlacementQuestion(); }
+  });
+  $('#placementExit').addEventListener('click', () => { placement = null; $('#placementSession').hidden = true; });
+
+  const translationChoices=languages.filter(([,code])=>code).map(([name,code])=>`<option value="${safeText(code)}">${safeText(name)}</option>`).join('');
+  $('#translateFrom').innerHTML=translationChoices;
+  $('#translateTo').innerHTML=translationChoices;
+  $('#translateFrom').value='en';$('#translateTo').value='hi';
+  $('#translateSwap').addEventListener('click', () => { const from=$('#translateFrom'),to=$('#translateTo'); const old=from.value;from.value=to.value;to.value=old; });
+  $('#translateLearningLanguage').addEventListener('click', () => {
+    const targetCode = languageCode || 'en';
+    if ([...$('#translateTo').options].some(option => option.value === targetCode)) $('#translateTo').value = targetCode;
+    else $('#translateOutput').textContent = `${language} is not in the translator's current language list.`;
+  });
+  $('#translateButton').addEventListener('click', async () => {
+    const text=$('#translateInput').value.trim(); if(!text){$('#translateOutput').textContent='Enter a word or sentence first.';return;}
+    if(new TextEncoder().encode(text).length>500){$('#translateOutput').textContent='This translation service accepts up to 500 bytes at a time. Shorten the text and try again.';return;}
+    const from=$('#translateFrom').value, to=$('#translateTo').value;
+    if(from===to){$('#translateOutput').textContent='Choose two different languages.';return;}
+    $('#translateButton').disabled=true;$('#translateOutput').textContent='Translating…';
+    try {
+      const pair=`${from}|${to}`;
+      const response=await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${encodeURIComponent(pair)}`);
+      if(!response.ok) throw new Error('translation unavailable');
+      const data=await response.json();
+      const translated=data?.responseData?.translatedText;
+      if(!translated || data.responseStatus !== 200) throw new Error('translation unavailable');
+      $('#translateOutput').textContent=translated;
+    } catch (_) { $('#translateOutput').textContent='Translation could not be reached. Check your connection and try again.'; }
+    finally { $('#translateButton').disabled=false; }
+  });
+  $('#translateInput').addEventListener('keydown', event => {if((event.ctrlKey||event.metaKey)&&event.key==='Enter')$('#translateButton').click();});
+
+  const vocabularyKey='northstar-vocabulary-progress';
+  const loadVocabularyProgress=()=>{try{return JSON.parse(localStorage.getItem(vocabularyKey)||'{}')}catch(_){return {}}};
+  let vocabularyProgress=loadVocabularyProgress();
+  $('#vocabularyGoal').value=String(vocabularyProgress.goal||10);
+  function renderVocabulary() {
+    const category=$('#vocabularyCategory').value, query=$('#vocabularySearch').value.trim().toLowerCase();
+    const today=new Date().toISOString().slice(0,10), dayWords=Object.keys(vocabularyProgress.learned||{}).filter(word=>vocabularyProgress.learned[word]===today).length;
+    const target=Number($('#vocabularyGoal').value||10);
+    $('#vocabularyDaily').textContent=`Today: ${dayWords} of ${target} words marked learned · Goal: ${target} words`;
+    $('#vocabularyProgressFill').style.width=`${Math.min(100,Math.round(dayWords/target*100))}%`;
+    const rows=vocabularyWords.filter(item=>(category==='all'||item.category===category)&&(!query||`${item.word} ${item.meaning} ${item.category}`.toLowerCase().includes(query)));
+    $('#vocabularyList').innerHTML=rows.map(item=>`<article class="vocabulary-word"><div><span class="vocabulary-category">${safeText(item.category)}</span><strong>${safeText(item.word)}</strong><p>${safeText(item.meaning)}</p><small>${safeText(item.example)}</small></div><button type="button" class="vocabulary-learned${vocabularyProgress.learned?.[item.word]===today?' is-learned':''}" data-vocabulary-learn="${safeText(item.word)}">${vocabularyProgress.learned?.[item.word]===today?'Learned ✓':'Mark learned'}</button></article>`).join('') || '<p class="vocabulary-empty">No starter words match. Press Enter to look this word up in the online English dictionary.</p>';
+    $$('.vocabulary-learned').forEach(button=>button.addEventListener('click',()=>{vocabularyProgress.learned ||= {};const word=button.dataset.vocabularyLearn;if(vocabularyProgress.learned[word]===today)delete vocabularyProgress.learned[word];else vocabularyProgress.learned[word]=today;vocabularyProgress.goal=target;localStorage.setItem(vocabularyKey,JSON.stringify(vocabularyProgress));renderVocabulary();}));
+  }
+  async function lookupVocabulary() {
+    const query=$('#vocabularySearch').value.trim(); if(!query)return;
+    const matches=vocabularyWords.some(item=>`${item.word} ${item.meaning}`.toLowerCase().includes(query.toLowerCase())); if(matches){renderVocabulary();return;}
+    $('#vocabularyList').innerHTML='<p class="vocabulary-empty">Looking up this English word…</p>';
+    try {
+      const response=await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(query)}`); if(!response.ok)throw new Error();
+      const data=await response.json(); const entry=data[0], meanings=(entry.meanings||[]).slice(0,5);
+      $('#vocabularyList').innerHTML=`<article class="vocabulary-word dictionary-result"><div><span class="vocabulary-category">ONLINE DICTIONARY · ${safeText(entry.word||query)}</span>${meanings.map(meaning=>`<strong>${safeText(meaning.partOfSpeech||'Meaning')}</strong>${(meaning.definitions||[]).slice(0,3).map(def=>`<p>${safeText(def.definition||'')}${def.example?`<small class="dictionary-example">Example: ${safeText(def.example)}</small>`:''}</p>`).join('')}`).join('')}</div></article>`;
+    } catch (_) { $('#vocabularyList').innerHTML='<p class="vocabulary-empty">No entry found or the online dictionary is unavailable. Try another spelling or search the starter list.</p>'; }
+  }
+  $('#vocabularyCategory').addEventListener('change',renderVocabulary);
+  $('#vocabularyGoal').addEventListener('change',()=>{vocabularyProgress.goal=Number($('#vocabularyGoal').value);localStorage.setItem(vocabularyKey,JSON.stringify(vocabularyProgress));renderVocabulary();});
+  $('#vocabularySearch').addEventListener('input',renderVocabulary);
+  $('#vocabularySearch').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();lookupVocabulary();}});
+  $('#vocabularyLookup').addEventListener('click',lookupVocabulary);
+  renderVocabulary();
+  const writingDraftKey=`northstar-writing-studio:${language}`;
+  $('#writingStudioInput').value=localStorage.getItem(writingDraftKey)||'';
+  $('#writingStudioInput').addEventListener('input',()=>{try{localStorage.setItem(writingDraftKey,$('#writingStudioInput').value)}catch(_){}});
+  $('#writingPromptSelect').addEventListener('change',()=>{const prompts={routine:'Describe your daily routine.',person:'Describe someone you admire and explain why.',travel:'Write about a place you want to visit.',work:'Explain a goal you have at work or school.',opinion:'Share an opinion and give one reason.'};$('#writingStudioFeedback').hidden=true;$('#writingStudioInput').setAttribute('aria-label',prompts[$('#writingPromptSelect').value]);});
+  $('#reviewWriting').addEventListener('click',()=>{
+    if(languageCode!=='en'){showToast('Writing review checks are currently available for English only.');return;}
+    const text=$('#writingStudioInput').value.trim(), sentences=text.split(/[.!?]+/).map(item=>item.trim()).filter(Boolean), words=text.match(/[\p{L}'’-]+/gu)||[], notes=[];
+    if(!text){$('#writingStudioFeedback').innerHTML='<strong>Write a few sentences first.</strong><p>Choose a prompt above and start with your own words.</p>';$('#writingStudioFeedback').hidden=false;return;}
+    if(/^[a-z]/.test(text))notes.push('Start your first sentence with a capital letter.');
+    if(!/[.!?]["')\]]?\s*$/.test(text))notes.push('Add a full stop, question mark or exclamation mark at the end.');
+    if(sentences.length<Number($('#writingSentenceGoal').value))notes.push(`You wrote ${sentences.length} sentence${sentences.length===1?'':'s'}; your goal is ${$('#writingSentenceGoal').value}. Add another detail or example.`);
+    if(/\bi am agree\b/i.test(text))notes.push('Try “I agree” (without “am”).');
+    if(/\bshe go\b/i.test(text))notes.push('For she/he/it in the present simple, write “she goes”.');
+    if(/\byesterday\b/i.test(text)&&/\bi go\b/i.test(text))notes.push('For a finished event, use “I went” instead of “I go”.');
+    if(!notes.length)notes.push('Good draft structure. Read it aloud once and check that each sentence supports your prompt.');
+    const promptText=$('#writingPromptSelect').selectedOptions[0].textContent;
+    $('#writingStudioFeedback').innerHTML=`<strong>Writing review · ${safeText(promptText)}</strong><p>${words.length} words · ${sentences.length} sentence${sentences.length===1?'':'s'}</p><ul>${notes.map(note=>`<li>${safeText(note)}</li>`).join('')}</ul><small>These are simple English checks, not a full grammar or fluency assessment.</small>`;
+    $('#writingStudioFeedback').hidden=false;
+  });
   const date = new Intl.DateTimeFormat('en',{weekday:'short',month:'short',day:'numeric'}).format(new Date());
   $('#todayLabel').textContent = date;
   $('#levelSelect').value = level;
@@ -307,10 +573,12 @@
   function renderLessons() {
     const course = getCourse(level);
     $('#roadmapTitle').textContent = `${level} · ${course.subtitle}`;
-    $('#languageScopeNote').textContent = language.toLowerCase() === 'english' ? 'English has topic-specific starter lessons. Writing drafts save only in this browser; speech recognition is a transcript, not pronunciation scoring.' : `${language} currently uses a general speaking roadmap. Grammar guidance and prompts have not been reviewed for every language; writing drafts save only in this browser.`;
+    $('#languageScopeNote').textContent = language.toLowerCase() === 'english' ? 'English grammar and speaking topics are explained in Hindi and English, with a practice quiz and topic video search in each lesson. The roadmap follows beginner, intermediate and advanced stages; use the linked references for further detail.' : `${language} uses a basic starter roadmap only. Detailed grammar explanations, reviewed quizzes and topic video searches are currently provided for English. Writing drafts save only in this browser.`;
+    const lessonIcons={SPEAKING:'chat',COMMUNICATION:'chat',SIMULATION:'chat',PRESENTATION:'video',PRONUNCIATION:'audio',VOCABULARY:'book',GRAMMAR:'book-open',FOUNDATION:'layers',LISTENING:'headphones',WRITING:'pencil',READING:'book-open',FLUENCY:'chat'};
     $('#lessonList').innerHTML = course.lessons.map((lesson,index) => {
       const done = completed.has(lesson.id);
-      return `<button class="lesson-row ${done?'is-complete':''}" data-lesson="${lesson.id}"><span class="lesson-index">${done?'✓':String(index+1).padStart(2,'0')}</span><span class="lesson-details"><span class="lesson-type">${lesson.type}</span><strong>${lesson.title}</strong><small>${lesson.desc}</small></span><span class="lesson-duration">${lesson.time}</span><span class="lesson-open">${done?'✓':'↗'}</span></button>`;
+      const icon=lessonIcons[lesson.type]||'book-open';
+      return `<button class="lesson-row ${done?'is-complete':''}" data-lesson="${lesson.id}"><span class="lesson-index"><svg aria-hidden="true"><use href="/static/icons.svg?v=northstar-icons-20261028-2#icon-${icon}"></use></svg><i>${String(index+1).padStart(2,'0')}</i></span><span class="lesson-details"><span class="lesson-type">${lesson.type}</span><strong>${lesson.title}</strong><small>${lesson.desc}</small></span><span class="lesson-duration">${lesson.time}</span><span class="lesson-open"><svg aria-hidden="true"><use href="/static/icons.svg#icon-arrow-right"></use></svg></span></button>`;
     }).join('');
     $$('.lesson-row').forEach(row => row.addEventListener('click', () => openLesson(row.dataset.lesson)));
     $('#progressLevel').textContent = level;
@@ -354,6 +622,35 @@
     field.addEventListener('input', () => { try { localStorage.setItem(key, field.value); } catch (_) { /* keep typing available if storage is disabled */ } });
   }
 
+  function topicPracticeMarkup(lesson) {
+    const hash=[...lesson.id].reduce((sum,char)=>sum+char.charCodeAt(0),0);
+    const conversational=/SPEAKING|COMMUNICATION|FLUENCY|PRESENTATION|DISCUSSION|SIMULATION/.test(lesson.type);
+    const pool=conversational?placementConversation:placementQuiz;
+    const items=Array.from({length:5},(_,index)=>pool[(hash+index*3)%pool.length]);
+    return `<section class="topic-practice" data-topic-practice><div class="topic-practice-heading"><div><span class="feature-tag">PRACTISE THIS TOPIC</span><h3>Quick check · 5 questions</h3><p>Answer a short English practice set and review the reasoning for each answer.</p></div><button type="button" class="primary-button" data-topic-start>Start practice →</button></div><div class="topic-practice-session" data-topic-session hidden data-items="${safeText(JSON.stringify(items))}"><p data-topic-count></p><strong data-topic-stem></strong><div class="topic-practice-options" data-topic-options></div><div class="topic-practice-feedback" data-topic-feedback hidden></div><button type="button" class="quiet-button" data-topic-next disabled>Check answer</button></div></section>`;
+  }
+  function bindTopicPractice() {
+    const root=$('[data-topic-practice]'); if(!root)return;
+    const session=$('[data-topic-session]',root), items=JSON.parse(session.dataset.items);let index=0,chosen=null,score=0,reviewed=false;
+    $('[data-topic-start]',root).addEventListener('click',()=>{
+      if(languageCode!=='en'){showToast('Topic quizzes currently have reviewed English questions only.');return;}
+      session.hidden=false;index=0;chosen=null;score=0;reviewed=false;$('[data-topic-next]',session).hidden=false;showTopicQuestion();
+    });
+    function showTopicQuestion(){
+      const item=items[index];reviewed=false;$('[data-topic-count]',session).textContent=`Question ${index+1} of ${items.length}`;$('[data-topic-stem]',session).textContent=item.q;
+      $('[data-topic-feedback]',session).hidden=true;$('[data-topic-next]',session).disabled=true;$('[data-topic-next]',session).textContent='Check answer';chosen=null;
+      $('[data-topic-options]',session).innerHTML=item.options.map((option,i)=>`<button type="button" class="placement-option" data-topic-option="${i}"><span>${String.fromCharCode(65+i)}</span>${safeText(option)}</button>`).join('');
+      $$('[data-topic-option]',session).forEach(button=>button.addEventListener('click',()=>{chosen=Number(button.dataset.topicOption);$$('[data-topic-option]',session).forEach(node=>node.classList.toggle('selected',node===button));$('[data-topic-next]',session).disabled=false;}));
+    }
+    $('[data-topic-next]',session).addEventListener('click',()=>{
+      if(!reviewed){if(chosen===null)return;const item=items[index],correct=chosen===item.answer;if(correct)score++;
+        $('[data-topic-feedback]',session).innerHTML=`<strong>${correct?'Correct.':'Not quite.'} ${correct?'':'Correct answer: '+safeText(item.options[item.answer])+'. '}</strong>${safeText(item.why)}`;$('[data-topic-feedback]',session).hidden=false;reviewed=true;
+        $('[data-topic-next]',session).textContent=index===items.length-1?'See results':'Next question';$('[data-topic-next]',session).disabled=false;return;}
+      if(index===items.length-1){$('[data-topic-stem]',session).textContent=`Practice complete · ${score} of ${items.length} correct.`;$('[data-topic-options]',session).innerHTML='';$('[data-topic-feedback]',session).innerHTML='Review the explanations above and revisit the lesson notes where useful.';$('[data-topic-next]',session).hidden=true;return;}
+      index++;showTopicQuestion();
+    });
+  }
+
   function openLesson(id) {
     const lesson = currentLessons().find(item=>item.id===id);
     if (!lesson) return;
@@ -362,8 +659,18 @@
     $('#lessonTitle').textContent = lesson.title;
     $('#lessonSummary').textContent = lesson.desc;
     const writingKey = `northstar-writing:${language}:${level}:${lesson.id}`;
-    $('#lessonBody').innerHTML = `<div class="lesson-note-card"><strong>QUICK NOTES</strong><ul>${lesson.notes.map(note=>`<li>${safeText(note)}</li>`).join('')}</ul></div><div class="lesson-practice-card"><span>TRY IT OUT</span><p>${safeText(lesson.practice)}</p><button class="inline-practice" id="lessonSpeak">Practise this aloud <span>🎙</span></button></div>${writingPracticeMarkup(writingKey, `Write your answer in ${language}.`)}`;
+    const explanations = lesson.notes.map(note => typeof note === 'string'
+      ? `<li>${safeText(note)}</li>`
+      : `<li class="grammar-explanation"><div><strong>English</strong><p>${safeText(note.en)}</p></div><div lang="hi"><strong>हिन्दी</strong><p>${safeText(note.hi)}</p></div></li>`).join('');
+    const isEnglishGrammar = lesson.id.startsWith('g-');
+    const referenceLinks = isEnglishGrammar ? '<div class="grammar-reference-links"><a href="https://learnenglish.britishcouncil.org/free-resources/grammar/english-grammar-reference" target="_blank" rel="noopener noreferrer">British Council grammar reference ↗</a><a href="https://dictionary.cambridge.org/grammar/british-grammar" target="_blank" rel="noopener noreferrer">Cambridge Grammar ↗</a></div>' : '';
+    const videoQuery = encodeURIComponent(`${lesson.title} English grammar ${level} Hindi explanation`);
+    const videoUrl = `https://www.youtube.com/results?search_query=${videoQuery}`;
+    const videoResource = isEnglishGrammar ? `<div class="lesson-video-resource"><span>KEEP LEARNING</span><a href="${videoUrl}" target="_blank" rel="noopener noreferrer">Find an English video for “${safeText(lesson.title)}” ↗</a><small>Opens a topic-specific YouTube search so you can choose a video at your level.</small></div>` : '';
+    const topicPractice = languageCode === 'en' ? topicPracticeMarkup(lesson) : '';
+    $('#lessonBody').innerHTML = `<div class="lesson-note-card grammar-notes"><strong>${isEnglishGrammar?'GRAMMAR EXPLANATION · ENGLISH + हिन्दी':'QUICK NOTES'}</strong><ul>${explanations}</ul>${referenceLinks}</div><div class="lesson-practice-card"><span>TRY IT OUT</span><p>${safeText(lesson.practice)}</p><button class="inline-practice" id="lessonSpeak">Practise this aloud <span><svg aria-hidden="true"><use href="/static/icons.svg?v=northstar-icons-20261028-2#icon-mic"></use></svg></span></button></div>${topicPractice}${writingPracticeMarkup(writingKey, `Write your answer in ${language}.`)}${videoResource}`;
     bindWritingPractice(writingKey);
+    bindTopicPractice();
     $('#lessonModal').hidden = false; document.body.classList.add('modal-open');
     $('#lessonSpeak').addEventListener('click', () => { closeModal('lessonModal'); $('#practiceGoal').dataset.customPrompt=lesson.practice; openPractice(lesson.practice); });
   }
@@ -384,7 +691,8 @@
   });
 
   function renderSkills() {
-    $('#softSkillGrid').innerHTML = skills.map((skill,index)=>`<button class="soft-skill-card" data-skill="${skill.id}"><span class="skill-card-top"><span class="skill-card-icon icon-${index%4}">${skill.icon}</span><span class="skill-card-tag">${skill.tag}</span></span><strong>${skill.title}</strong><small>${skill.desc}</small><span class="skill-card-link">Learn & practise <b>↗</b></span></button>`).join('');
+    const skillIcons={'active-listening':'headphones',confidence:'sparkles',interviews:'briefcase',teamwork:'chat',communication:'chat','problem-solving':'brain','leadership':'target'};
+    $('#softSkillGrid').innerHTML = skills.map((skill,index)=>`<button class="soft-skill-card" data-skill="${skill.id}"><span class="skill-card-top"><span class="skill-card-icon icon-${index%4}"><svg aria-hidden="true"><use href="/static/icons.svg#icon-${skillIcons[skill.id]||'sparkles'}"></use></svg></span><span class="skill-card-tag">${skill.tag}</span></span><strong>${skill.title}</strong><small>${skill.desc}</small><span class="skill-card-link">Learn & practise <b><svg aria-hidden="true"><use href="/static/icons.svg#icon-arrow-right"></use></svg></b></span></button>`).join('');
     $$('.soft-skill-card').forEach(card=>card.addEventListener('click',()=>openSkill(card.dataset.skill)));
   }
   function openSkill(id) {
@@ -393,7 +701,7 @@
     $('#lessonTitle').textContent=activeSkill.title;
     $('#lessonSummary').textContent=activeSkill.desc;
     const writingKey=`northstar-soft-writing:${activeSkill.id}`;
-    $('#lessonBody').innerHTML=`<div class="lesson-note-card"><strong>A SIMPLE FRAMEWORK</strong><ol>${activeSkill.framework.map(item=>`<li>${safeText(item)}</li>`).join('')}</ol></div><div class="lesson-practice-card"><span>SCENARIO PRACTICE</span><p>${safeText(activeSkill.prompt)}</p><button class="inline-practice" id="skillSpeak">Rehearse this scenario <span>🎙</span></button></div>${writingPracticeMarkup(writingKey, 'Write a brief response to this scenario, then compare it with the framework above.')}`;
+    $('#lessonBody').innerHTML=`<div class="lesson-note-card"><strong>A SIMPLE FRAMEWORK</strong><ol>${activeSkill.framework.map(item=>`<li>${safeText(item)}</li>`).join('')}</ol></div><div class="lesson-practice-card"><span>SCENARIO PRACTICE</span><p>${safeText(activeSkill.prompt)}</p><button class="inline-practice" id="skillSpeak">Rehearse this scenario <span><svg aria-hidden="true"><use href="/static/icons.svg?v=northstar-icons-20261028-2#icon-mic"></use></svg></span></button></div>${writingPracticeMarkup(writingKey, 'Write a brief response to this scenario, then compare it with the framework above.')}`;
     bindWritingPractice(writingKey);
     $('#lessonModal').hidden=false;document.body.classList.add('modal-open');
     $('#skillSpeak').addEventListener('click',()=>{closeModal('lessonModal');$('#practiceGoal').value=activeSkill.title;currentMode='guided';openPractice(activeSkill.prompt);});
@@ -403,22 +711,38 @@
   function openPractice(prompt) {
     $('#practiceModal').hidden=false; document.body.classList.add('modal-open');
     $('#sessionSetup').hidden=false; $('#liveSession').hidden=true; $('#practiceTitle').textContent='Let’s find your focus.';
+    $('#practiceSituation').value=prompt||'';
+    $('#situationVoiceStatus').textContent='Type a situation or dictate it with your microphone.';
     if (prompt) { $('#practiceGoal').value='Other'; $('#practiceGoal').dataset.customPrompt=prompt; }
     else delete $('#practiceGoal').dataset.customPrompt;
     $$('.mode-choice').forEach(button=>button.classList.toggle('selected',button.dataset.mode===currentMode));
   }
   $('#openPractice').addEventListener('click',()=>openPractice());
+  $('#recordSituation').addEventListener('click',()=>{
+    const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SpeechRecognition){$('#situationVoiceStatus').textContent='Voice input is not supported in this browser. Type your situation instead.';return;}
+    if(situationRecognition){try{situationRecognition.abort()}catch(_){}situationRecognition=null;}
+    situationRecognition=new SpeechRecognition();situationRecognition.lang=languageLocale;situationRecognition.continuous=false;situationRecognition.interimResults=true;situationRecognition.maxAlternatives=1;
+    $('#situationVoiceStatus').textContent=`Listening in ${language}…`;
+    situationRecognition.onresult=event=>{let text='';for(let i=event.resultIndex;i<event.results.length;i++)text+=event.results[i][0].transcript;$('#practiceSituation').value=text.trim();};
+    situationRecognition.onerror=event=>{$('#situationVoiceStatus').textContent=event.error==='not-allowed'?'Allow microphone access or type your situation.':'I could not hear that clearly. Try again or type it.';};
+    situationRecognition.onend=()=>{if($('#practiceSituation').value.trim())$('#situationVoiceStatus').textContent='Situation captured. You can edit it before starting.';situationRecognition=null;};
+    try{situationRecognition.start()}catch(_){$('#situationVoiceStatus').textContent='The microphone could not start. Type your situation instead.';}
+  });
   $('#softStart').addEventListener('click',()=>{switchSection('soft');openPractice('Tell me one situation where you would like to feel more confident.');});
   $('#softScenario').addEventListener('click',()=>{switchSection('soft');openPractice('A teammate disagrees with your idea. How would you respond while keeping the conversation constructive?');});
   $$('.mode-choice').forEach(button=>button.addEventListener('click',()=>{$$('.mode-choice').forEach(item=>item.classList.remove('selected'));button.classList.add('selected');currentMode=button.dataset.mode;}));
   $('#beginSession').addEventListener('click',async()=>{
+    if(languageCode!=='en'&&!localizedPrompts[languageCode]){showToast(`Conversation prompts for ${language} are not available in this preview.`);return;}
+    if(situationRecognition){try{situationRecognition.abort()}catch(_){}situationRecognition=null;}
+    activePracticeSituation=$('#practiceSituation').value.trim();
     goal=$('#practiceGoal').value; await saveProfile(true);
     $('#sessionSetup').hidden=true;$('#liveSession').hidden=false;
     $('#practiceTitle').textContent='Take your time. I’m listening.';
     $('#liveModeLabel').textContent=`${currentMode.toUpperCase()} PRACTICE · ${language.toUpperCase()}`;
     const spokenPrompts=localizedPrompts[languageCode] || prompts[currentMode];
-    $('#coachPrompt').textContent=$('#practiceGoal').dataset.customPrompt || (languageCode && languageCode!=='en' ? spokenPrompts[0] : (goalPrompts[goal] || prompts[currentMode][0]));
-    $('#conversationFeed').innerHTML=`<div class="coach-bubble"><span class="coach-avatar">✳</span><p id="coachPrompt">${safeText($('#coachPrompt').textContent)}</p></div>`;
+    $('#coachPrompt').textContent=activePracticeSituation || $('#practiceGoal').dataset.customPrompt || (languageCode && languageCode!=='en' ? spokenPrompts[0] : (goalPrompts[goal] || prompts[currentMode][0]));
+    $('#conversationFeed').innerHTML=`<div class="coach-bubble"><span class="coach-avatar"><svg aria-hidden="true"><use href="/static/icons.svg?v=northstar-icons-20261028-2#icon-northstar"></use></svg></span><p id="coachPrompt">${safeText($('#coachPrompt').textContent)}</p></div>`;
     $('#transcriptBox').textContent='Your words will appear here after you finish speaking.';$('#coachFeedback').hidden=true;
     currentPromptIndex=0;$('#sessionTimer').textContent='00:00';$('#micHint').textContent='Tap the microphone when you\'re ready to speak.';
     sessionActive=true;sessionSeconds=0;clearInterval(timerId);timerId=setInterval(()=>{sessionSeconds++;$('#sessionTimer').textContent=`${String(Math.floor(sessionSeconds/60)).padStart(2,'0')}:${String(sessionSeconds%60).padStart(2,'0')}`},1000);
@@ -434,25 +758,28 @@
     $('#transcriptBox').textContent=clean || 'I did not catch that clearly. Try again when you are ready.';
     const words=clean.match(/[\p{L}']+/gu)||[];
     const fillers=languageCode==='en'?(clean.match(/\b(um|uh|erm|like|you know)\b/gi)||[]).length:null;
-    let response='Good start—I understood your main idea. Keep going and add one more detail or example.';
+    let response=languageCode==='en'?'Good start—I understood your main idea. Keep going and add one more detail or example.':`Transcript captured. Automated grammar feedback is available for English only; ask a fluent speaker to review your ${language} response.`;
     let retry=false;
     const pastCue=/\b(yesterday|last (?:night|week|month)|ago)\b/i.test(clean);
     if(languageCode==='en' && pastCue && /\bi go\b/i.test(clean)) { response='I understood you. Since you mentioned a finished time, try “I went” instead of “I go”. Say the sentence once more when you are ready.'; retry=true; }
-    else if(words.length<7) response='Nice start. Can you add one more sentence explaining why or what happened next?';
+    else if(languageCode==='en' && words.length<7) response='Nice start. Can you add one more sentence explaining why or what happened next?';
     else if(languageCode==='en' && fillers>=3) response='Your idea came through. Try a short pause instead of a filler word, then continue with your next point.';
-    $('#coachFeedback').innerHTML=`<span>COACHING NOTE · PRACTICE PREVIEW</span><p>${safeText(response)}</p><small>${words.length} recognized word units · ${fillers===null?'filler-word review unavailable for this language':`${fillers} English filler words`} · transcript only</small>`;
+    $('#coachFeedback').innerHTML=`<span>BASIC PRACTICE FEEDBACK · TRANSCRIPT ONLY</span><p>${safeText(response)}</p><small>${words.length} recognized word units · ${fillers===null?'filler-word review unavailable for this language':`${fillers} English filler words`} · no pronunciation score</small>`;
     $('#coachFeedback').hidden=false;
     $('#micHint').textContent='You can try again, or hear the next prompt.';
-    speakPrompt(response);
+    if(languageCode==='en')speakPrompt(response);
     if (!retry && sessionActive) {
       currentPromptIndex++;
-      const activePrompts=localizedPrompts[languageCode] || prompts[currentMode] || prompts.guided;
+      const activePrompts=activePracticeSituation
+        ? ['In this situation, what would you say first?','How might the other person respond, and what would you say next?','What outcome do you want, and how could you ask for it clearly?']
+        : (localizedPrompts[languageCode] || (languageCode==='en' ? (prompts[currentMode] || prompts.guided) : []));
+      if(!activePrompts.length){$('#micHint').textContent=`Prompts for ${language} are not reviewed in this practice preview.`;return;}
       const next = activePrompts[currentPromptIndex % activePrompts.length];
       setTimeout(() => {
         if (!sessionActive) return;
         $('#coachPrompt').textContent = next;
         const bubble=document.createElement('div'); bubble.className='coach-bubble next-coach-bubble';
-        bubble.innerHTML=`<span class="coach-avatar">✳</span><p>${safeText(next)}</p>`; $('#conversationFeed').appendChild(bubble);
+        bubble.innerHTML=`<span class="coach-avatar"><svg aria-hidden="true"><use href="/static/icons.svg?v=northstar-icons-20261028-2#icon-northstar"></use></svg></span><p>${safeText(next)}</p>`; $('#conversationFeed').appendChild(bubble);
         speakPrompt(next); $('#micHint').textContent='Tap the microphone when you are ready to answer.';
       }, 1800);
     }

@@ -15,7 +15,7 @@ input::placeholder{color:#85948a}input:focus,.email-form .text-input:focus{borde
 .flash.error{background:#321d1a;color:#f2b3a7}.flash.success{background:#193123;color:#a8dfb3}
 @media(max-width:650px){.page-shell{background:#0a0f0c}.form-panel{background:#0a0f0c}.mobile-brand{color:#e4ece6}}
 
-.apple{color:#eef2ef}.provider-button:focus-visible,.auth-tab:focus-visible,.submit-button:focus-visible,.back-link:focus-visible{outline:2px solid #79bd8c;outline-offset:3px}::selection{background:#315d3d;color:#f4fff5}input:-webkit-autofill{-webkit-text-fill-color:#e6eee8;box-shadow:0 0 0 1000px #0d140f inset}
+.apple{color:#eef2ef}.provider-button:focus-visible,.auth-tab:focus-visible,.submit-button:focus-visible,.back-link:focus-visible{outline:2px solid #9fc8f2;outline-offset:3px}::selection{background:#315d3d;color:#f4fff5}input:-webkit-autofill{-webkit-text-fill-color:#e6eee8;box-shadow:0 0 0 1000px #0d140f inset}
 
 /* Navy and cool-grey palette */
 :root{--ink:#e7ebf1;--muted:#a9b2c0;--line:#303b4d;--green:#8bb7e8;color-scheme:dark}
@@ -31,3 +31,6 @@ input,.email-form .text-input{background:#101827;color:#e7ebf1;border-color:#3a4
 input:focus,.email-form .text-input:focus{border-color:#79a9dc;box-shadow:0 0 0 3px #689bd02b}
 .flash.success{background:#1c2b3d;color:#c7d9ec}
 @media(max-width:650px){.page-shell,.form-panel{background:#0b1220}.mobile-brand{color:#e7ebf1}}
+
+/* A soft lavender and warm-yellow color wash shared across every page. */
+body::after{position:fixed;z-index:9999;inset:0;content:"";pointer-events:none;opacity:.3;mix-blend-mode:soft-light;background:linear-gradient(118deg,rgba(177,143,255,.72),transparent 47%),radial-gradient(ellipse at 88% 23%,rgba(255,216,112,.74),transparent 43%),radial-gradient(ellipse at 47% 100%,rgba(219,193,255,.42),transparent 54%)}

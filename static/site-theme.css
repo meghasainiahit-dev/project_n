@@ -1,0 +1,44 @@
+/* Northstar's shared violet night theme for authentication and verification screens. */
+:root { --green: #8677f4; --ink: #f4f2fb; --muted: #aaa6bc; --line: #2c2938; color-scheme: dark; }
+body { background: #09090f; color: #f4f2fb; }
+.page-shell { background: #09090f; }
+.visual-panel { background: radial-gradient(circle at 78% 72%,#3f2b89 0,transparent 38%),linear-gradient(145deg,#14122a,#08090f 70%); color: #f4f2fb; }
+.visual-copy h1 em { color: #a497ff; }
+.eyebrow { color: #c0b9ff; }
+.eyebrow i { background: #f0c957; box-shadow: 0 0 14px #f0c95788; }
+.brand-mark { color: #8b7cf6; }
+.brand-mark svg { display: block; width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.visual-copy p,.panel-footer { color: #b4afc6; }
+.orbit { border-color: #aa9cff32; }
+.orbit-two { border-color: #aa9cff25; }
+.sun { background: radial-gradient(circle at 35% 32%,#a99cff,#6853d9 65%,#30245e); box-shadow: 0 0 75px #826bf359; }
+.planet-one { background: #f0bd4b; }
+.planet-two { background: #8e7af3; }
+.spark { color: #f0c957; }
+.spark svg { display:block; width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+.form-panel,.simple-page { background: #0b0b12; color: #f4f2fb; }
+.form-panel { border-color: #211f2d; }
+.form-heading h2,.verify-title { color: #f5f3fc; }
+.form-heading p,.verify-copy { color: #aaa6bc; }
+.step-label,.code-label,.email-form label { color: #a9a1c4; }
+.step-label>span { color: #a89aff; }
+.step-label i { background: #403a58; }
+.provider-button,.auth-tabs,.auth-tab.active,.verify-card { border-color: #302d40; background: #14131c; color: #f2effa; }
+.provider-button:hover { border-color: #8071ed; background: #1b1928; box-shadow: 0 8px 22px #6957ce22; }
+.auth-tab { color: #aaa6bc; }
+.auth-tab.active { background: #272244; color: #ddd7ff; box-shadow: 0 2px 10px #8071ed28; }
+.divider span { background: #302d40; }
+.divider small,.terms,.secure-note,.password-note,.help-link { color: #9994aa; }
+.terms a,.help-link a,.back-link { color: #b5aaff; }
+.verify-copy strong { color: #ddd7ff; }
+input,.email-form .text-input { background: #0d0c14; color: #f4f2fb; border-color: #363247; }
+input::placeholder { color: #817c92; }
+input:focus,.email-form .text-input:focus { border-color: #8878f2; box-shadow: 0 0 0 3px #8878f233; }
+.submit-button { background: linear-gradient(120deg,#6f62e8,#927eff); color: #fff; box-shadow: 0 8px 22px #7465e83a; }
+.submit-button:hover { background: linear-gradient(120deg,#7d70f2,#a08fff); }
+.flash.error { background: #351c29; color: #ffc1d6; }
+.flash.success { background: #18332f; color: #95ead2; }
+.apple { color: #f4f2fb; }
+.provider-button:focus-visible,.auth-tab:focus-visible,.submit-button:focus-visible,.back-link:focus-visible { outline: 2px solid #a99cff; outline-offset: 3px; }
+::selection { background: #5f50b8; color: #fff; }
+input:-webkit-autofill { -webkit-text-fill-color: #f4f2fb; box-shadow: 0 0 0 1000px #0d0c14 inset; }

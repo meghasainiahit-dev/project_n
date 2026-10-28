@@ -2,12 +2,12 @@
 {% block body %}
 <main class="page-shell">
 <section class="visual-panel">
-<a class="brand" href="/"><span class="brand-mark">✳</span><span>northstar</span></a>
+<a class="brand" href="/"><span class="brand-mark"><svg aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}?v=northstar-icons-20261028-2#icon-northstar"></use></svg></span><span>northstar</span></a>
 <div class="visual-copy"><span class="eyebrow"><i></i> YOUR SPACE, IN SYNC</span><h1>Good things<br>start <em>together.</em></h1><p>A calmer place to bring your ideas, plans, and people together.</p></div>
-<div class="artwork"><div class="orbit"></div><div class="orbit orbit-two"></div><div class="sun"></div><div class="planet planet-one"></div><div class="planet planet-two"></div><span class="spark">✳</span><div class="art-caption">MAKE ROOM FOR WHAT MATTERS</div></div>
+<div class="artwork"><div class="orbit"></div><div class="orbit orbit-two"></div><div class="sun"></div><div class="planet planet-one"></div><div class="planet planet-two"></div><span class="spark"><svg aria-hidden="true"><use href="/static/icons.svg?v=northstar-icons-20261028-2#icon-sparkles"></use></svg></span><div class="art-caption">MAKE ROOM FOR WHAT MATTERS</div></div>
 <div class="panel-footer">Thoughtfully made for your next chapter.<span>© 2026 Northstar</span></div>
 </section>
-<section class="form-panel"><a class="mobile-brand brand" href="/"><span class="brand-mark">✳</span><span>northstar</span></a>
+<section class="form-panel"><a class="mobile-brand brand" href="/"><span class="brand-mark"><svg aria-hidden="true"><use href="{{ url_for('static', path='/icons.svg') }}?v=northstar-icons-20261028-2#icon-northstar"></use></svg></span><span>northstar</span></a>
 <div class="auth-card"><div class="form-heading"><div class="step-label"><span>01</span><i></i> YOUR ACCOUNT</div><h2 id="heading">Welcome back</h2><p id="subheading">Log in with your email and Northstar password.</p></div>
 {% for message in messages %}<p class="flash {{ message.category }}">{{ message.text }}</p>{% endfor %}
 <div class="auth-tabs" role="tablist"><button type="button" class="auth-tab active" id="loginTab" onclick="setMode('login')">Log in</button><button type="button" class="auth-tab" id="signupTab" onclick="setMode('signup')">Create account</button></div>

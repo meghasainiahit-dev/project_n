@@ -8,6 +8,8 @@
   let questionIndex = 0, correctCount = 0, quizFinished = false;
   let filter = 'all', progress = {};
   const escapeHTML = value => String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  const iconForTopic = topic => topic.group === 'Quantitative' ? 'calculator' : topic.group === 'Reasoning' ? 'brain' : topic.filter === 'language' ? 'book-open' : 'sparkles';
+  const iconMarkup = name => `<svg aria-hidden="true"><use href="/static/icons.svg?v=northstar-icons-20261028-2#icon-${name}"></use></svg>`;
 
   function renderCatalog() {
     const needle = ($('#topicSearch').value || '').trim().toLowerCase();
@@ -17,7 +19,7 @@
     const groups = [...new Set(matching.map(t => t.group))];
     $('#aptitudeGroups').innerHTML = groups.length ? groups.map(group => `
       <section class="aptitude-group"><div class="aptitude-group-heading"><h3>${escapeHTML(group)}</h3><span>${matching.filter(t => t.group === group).length} topics</span></div>
-      <div class="topic-card-grid">${matching.filter(t => t.group === group).map(t => `<button class="topic-card" data-topic="${escapeHTML(t.id)}"><span class="topic-card-top"><span class="topic-card-icon">${escapeHTML(t.icon)}</span><span class="topic-card-arrow">↗</span></span><strong>${escapeHTML(t.name)}</strong><span class="topic-card-desc">${escapeHTML(t.description)}</span><span class="topic-card-tags">${t.tags.slice(0,3).map(x=>`<i>${escapeHTML(x)}</i>`).join('')}</span><span class="topic-card-meta">3 levels <b>·</b> lesson + quiz</span></button>`).join('')}</div>
+      <div class="topic-card-grid">${matching.filter(t => t.group === group).map(t => `<button class="topic-card" data-topic="${escapeHTML(t.id)}"><span class="topic-card-top"><span class="topic-card-icon">${iconMarkup(iconForTopic(t))}</span><span class="topic-card-arrow">${iconMarkup('arrow-right')}</span></span><strong>${escapeHTML(t.name)}</strong><span class="topic-card-desc">${escapeHTML(t.description)}</span><span class="topic-card-tags">${t.tags.slice(0,3).map(x=>`<i>${escapeHTML(x)}</i>`).join('')}</span><span class="topic-card-meta">3 levels <b>·</b> lesson + quiz</span></button>`).join('')}</div>
     </section>`).join('') : '<div class="topic-empty">No topics match that search. Try a different keyword or filter.</div>';
     document.querySelectorAll('[data-topic]').forEach(card => card.addEventListener('click', () => openTopic(card.dataset.topic)));
   }
@@ -72,7 +74,7 @@
     $('#topicGroupLabel').textContent = selectedTopic.group.toUpperCase();
     $('#topicTitle').textContent = selectedTopic.name;
     $('#topicDescription').textContent = selectedTopic.description;
-    $('#topicDetailIcon').textContent = selectedTopic.icon;
+    $('#topicDetailIcon').innerHTML = iconMarkup(iconForTopic(selectedTopic));
     $('#topicOverlap').innerHTML = `<strong>How this relates:</strong> ${escapeHTML(selectedTopic.overlap)}`;
     renderLesson();
     $('#aptitudeDetail').scrollIntoView({behavior:'smooth', block:'start'});
