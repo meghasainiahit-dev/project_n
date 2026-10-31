@@ -9,6 +9,7 @@
     document.body.dataset.theme = isLight ? 'light' : 'dark';
     const themeColor = document.querySelector('meta[name="theme-color"]');
     if (themeColor) themeColor.content = isLight ? '#f2f4f7' : '#0b1220';
+    document.querySelectorAll('[data-reader-theme-toggle]').forEach(button=>{button.textContent=isLight?'Dark mode':'Light mode';button.setAttribute('aria-label',`Switch to ${isLight?'dark':'light'} mode`);button.setAttribute('aria-pressed',String(isLight));});
     if (!themeToggle) return;
     themeToggle.setAttribute('aria-pressed', String(isLight));
     themeToggle.setAttribute('aria-label', `Switch to ${isLight ? 'dark' : 'light'} mode`);
@@ -21,6 +22,7 @@
     localStorage.setItem('northstar-violet-theme', nextTheme);
     applyTheme(nextTheme);
   });
+  document.querySelectorAll('[data-reader-theme-toggle]').forEach(button=>button.addEventListener('click',()=>{const nextTheme=document.body.dataset.theme==='light'?'dark':'light';localStorage.setItem('northstar-violet-theme',nextTheme);applyTheme(nextTheme);}));
   const catalogSearch = document.querySelector('#catalogSearch');
   const catalogEmpty = document.querySelector('#catalogEmpty');
   catalogSearch?.addEventListener('input', () => {
@@ -44,6 +46,13 @@
   const languages = [
     ['Arabic','ar','ar-SA'],['Bengali','bn','bn-BD'],['Chinese (Mandarin)','zh','zh-CN'],['Dutch','nl','nl-NL'],['English','en','en-US'],['French','fr','fr-FR'],['German','de','de-DE'],['Greek','el','el-GR'],['Gujarati','gu','gu-IN'],['Hebrew','he','he-IL'],['Hindi','hi','hi-IN'],['Indonesian','id','id-ID'],['Italian','it','it-IT'],['Japanese','ja','ja-JP'],['Kannada','kn','kn-IN'],['Korean','ko','ko-KR'],['Malayalam','ml','ml-IN'],['Marathi','mr','mr-IN'],['Nepali','ne','ne-NP'],['Persian','fa','fa-IR'],['Polish','pl','pl-PL'],['Portuguese','pt','pt-BR'],['Punjabi','pa','pa-IN'],['Russian','ru','ru-RU'],['Spanish','es','es-ES'],['Swahili','sw','sw-KE'],['Tamil','ta','ta-IN'],['Telugu','te','te-IN'],['Thai','th','th-TH'],['Turkish','tr','tr-TR'],['Ukrainian','uk','uk-UA'],['Urdu','ur','ur-PK'],['Vietnamese','vi','vi-VN'],['Other language','','']
   ];
+  const lessonTranslationKey='northstar-lesson-translation-language';
+  let lessonTranslationCode=localStorage.getItem(lessonTranslationKey)||'hi';
+  if(!languages.some(([,code])=>code===lessonTranslationCode)) lessonTranslationCode='hi';
+  function lessonLanguageTabsMarkup(){
+    const choices=languages.filter(([,code])=>code&&code!=='en').map(([name,code])=>`<option value="${safeText(code)}">${safeText(name)}</option>`).join('');
+    return `<div class="lesson-language-tabs" role="group" aria-label="Explanation language"><button type="button" aria-pressed="false" data-lesson-language="en">English</button><label class="lesson-translation-select-label" id="lessonTranslationLanguageLabel"><span class="sr-only">Translation language</span><select id="lessonTranslationLanguage" aria-label="Choose translation language">${choices}</select></label><button type="button" aria-pressed="true" class="active" data-lesson-language="both">Both</button></div>`;
+  }
   const localizedPrompts = {
     es:['¡Hola! Practiquemos español. Cuéntame algo bueno que te pasó esta semana.','¿Qué te gustaría aprender este año y por qué?','Describe un lugar que te gustaría visitar.'],
     fr:['Bonjour ! Pratiquons le français. Raconte-moi une petite chose qui t’a fait sourire cette semaine.','Qu’aimerais-tu apprendre cette année, et pourquoi ?','Décris un endroit que tu aimerais visiter.'],
@@ -123,8 +132,116 @@
   let languageLocale = languages.find(item=>item[0].toLowerCase()===language.toLowerCase())?.[2] || 'en-US';
   let goal = app.dataset.goal || 'Everyday conversation';
   let currentMode = app.dataset.mode || 'guided';
+  document.addEventListener('click',event=>{
+    const trigger=event.target.closest?.('#openPractice,.voice-mode-tile');
+    if(!trigger)return;
+    event.preventDefault();
+    if(trigger.dataset.voiceMode)currentMode=trigger.dataset.voiceMode;
+    try { openPractice(); }
+    catch(error) {
+      console.error('Could not open voice practice:',error);
+      const modal=$('#practiceModal');
+      if(modal){modal.hidden=false;$('#sessionSetup').hidden=false;$('#liveSession').hidden=true;document.body.classList.add('modal-open');}
+    }
+  });
   let activeLesson = null;
   let activeSkill = null;
+  let activeLessonScore = null;
+  let lastDetailTrigger = null;
+  let readerScrollBeforeOpen = 0;
+  const readerFontKey = 'northstar-reader-font-size';
+  const readerLanguageKey = 'northstar-reader-language';
+  function setReaderBodyLock(locked) {
+    if (locked) { if (!document.body.classList.contains('modal-open')) readerScrollBeforeOpen = window.scrollY; document.body.classList.add('modal-open'); }
+    else { document.body.classList.remove('modal-open'); window.scrollTo(0, readerScrollBeforeOpen); }
+  }
+  function openReadingModal(id, hash) {
+    const backdrop = $(`#${id}`), dialog = backdrop?.querySelector('[role="dialog"]');
+    if (!backdrop || !dialog) return;
+    if (backdrop.hidden) {
+      if (!document.activeElement.closest?.('.detail-modal')) lastDetailTrigger = document.activeElement;
+      setReaderBodyLock(true);
+      history.pushState({...history.state, northstarReadingModal:id}, '', `${location.pathname}${location.search}#${hash}`);
+    } else history.replaceState({...history.state, northstarReadingModal:id}, '', `${location.pathname}${location.search}#${hash}`);
+    backdrop.hidden = false;
+    dialog.scrollTop = 0;
+    dialog.focus();
+    refreshReaderProgress(dialog);
+    if(id==='lessonModal'&&$('#lessonBody').querySelector('.chapter-concept'))queueChapterTranslations($('#lessonBody').dataset.translationTarget||lessonTranslationCode,$('#lessonBody'));
+  }
+  function installReaderContent(body, title, summary = '') {
+    body.querySelector('.detail-page-heading')?.remove();
+    const heading = document.createElement('div');
+    heading.className = 'detail-page-heading';
+    const h1 = document.createElement('h1'); h1.textContent = title;
+    h1.id = body.classList.contains('placement-modal-body') ? 'placementPageTitle' : body.id === 'lessonBody' ? 'lessonTitle' : 'vocabularyModalTitle';
+    heading.append(h1);
+    if (summary) { const p = document.createElement('p'); p.textContent = summary; heading.append(p); }
+    body.prepend(heading);
+    const languageTabs = body.querySelector('.lesson-language-tabs');
+    if (body.id === 'lessonBody' && languageTabs) body.insertBefore(languageTabs, heading);
+    let sidebar = body.id === 'lessonBody' ? body.querySelector('.detail-reading-sidebar') : null;
+    if (body.id === 'lessonBody' && !sidebar) { sidebar = document.createElement('aside'); sidebar.className = 'detail-reading-sidebar'; sidebar.setAttribute('aria-label', 'Lesson navigation and suggestions'); body.append(sidebar); }
+    let toc = body.querySelector('.detail-reading-toc');
+    if (!toc) { toc = document.createElement('aside'); toc.className = 'detail-reading-toc'; toc.setAttribute('aria-label', 'On this page'); (sidebar || body).append(toc); }
+    const candidates = $$('h2,h3,h4,.placement-type strong', body).filter(node => !node.closest('.detail-page-heading') && !node.closest('.detail-reading-toc') && !node.hidden);
+    toc.innerHTML = candidates.length ? `<strong>On this page</strong><nav>${candidates.map((node,index) => {
+      const label = node.textContent.trim();
+      if (!label) return '';
+      if (!node.id) node.id = `reader-section-${index}-${label.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}`;
+      return `<a href="#${node.id}" aria-label="${safeText(label)}"><span>${label}</span><i aria-hidden="true">○</i></a>`;
+    }).join('')}</nav>` : '';
+    if(body.id==='lessonBody'&&toc.querySelector('nav')){
+      sidebar.querySelector('.detail-reading-video')?.remove();
+      const suggestions=document.createElement('section');suggestions.className='detail-reading-video';
+      const videoTitle=activeSkill?.title||activeLesson?.title||title;
+      const headingText=document.createElement('strong');headingText.textContent='Suggested videos';suggestions.append(headingText);
+      const suggestionsList=document.createElement('div');suggestionsList.className='detail-reading-video-links';
+      [[`${videoTitle} ${language} lesson explained`,`${language} lesson: ${videoTitle}`],[`${videoTitle} ${language} explanation`,`${language} explanation`],[`${videoTitle} examples and practice`,`${videoTitle}: examples & practice`]].forEach(([query,label])=>{
+        const link=document.createElement('a');link.href=`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;link.target='_blank';link.rel='noopener noreferrer';link.textContent=label;link.setAttribute('aria-label',`${label} videos about ${videoTitle}`);suggestionsList.append(link);
+      });
+      suggestions.append(suggestionsList);sidebar.append(suggestions);
+      heading.after(sidebar);
+    }
+    toc.hidden = !candidates.length;
+  }
+  function refreshReaderProgress(dialog) {
+    const bar = dialog.querySelector('.detail-reading-progress i');
+    if (!bar) return;
+    const max = dialog.scrollHeight - dialog.clientHeight;
+    bar.style.width = `${max > 0 ? Math.min(100, dialog.scrollTop / max * 100) : 0}%`;
+  }
+  document.addEventListener('scroll', event => {
+    const dialog = event.target.closest?.('.detail-modal');
+    if (dialog) {
+      refreshReaderProgress(dialog);
+      const toc = dialog.querySelector('.detail-reading-toc nav');
+      if (toc) {
+        const links = [...toc.querySelectorAll('a')];
+        const current = links.map(link=>({link,node:document.getElementById(decodeURIComponent(link.hash.slice(1)))})).filter(item=>item.node).filter(item=>item.node.getBoundingClientRect().top<=150).at(-1) || links.map(link=>({link,node:document.getElementById(decodeURIComponent(link.hash.slice(1)))})).find(item=>item.node);
+        if (current) links.forEach(link=>link.classList.toggle('active',link===current.link));
+        links.forEach(link=>{const target=document.getElementById(decodeURIComponent(link.hash.slice(1)));if(target&&target.getBoundingClientRect().top<150){link.classList.add('visited');link.setAttribute('aria-label',`${link.querySelector('span')?.textContent||link.textContent}, visited`);}});
+      }
+      const chapter=dialog.querySelector('#lessonBody');if(chapter?.querySelector('.chapter-concept'))queueChapterTranslations(chapter.dataset.translationTarget||lessonTranslationCode,chapter);
+    }
+  }, true);
+  document.addEventListener('click', event => {
+    const jump=event.target.closest?.('[data-reader-jump]');
+    if(jump){event.preventDefault();document.getElementById(jump.dataset.readerJump)?.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});return;}
+    const link = event.target.closest?.('.detail-reading-toc a[href^="#reader-section-"]');
+    if (!link) return;
+    event.preventDefault();
+    const target = document.getElementById(decodeURIComponent(link.hash.slice(1)));
+    target?.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});
+    link.closest('nav')?.querySelectorAll('a').forEach(item=>item.classList.toggle('active',item===link));
+  });
+  window.addEventListener('popstate', () => {
+    const open = $$('.detail-backdrop:not([hidden])').at(-1);
+    if (open && history.state?.northstarReadingModal !== open.id) {
+      if (open.id === 'practiceModal') { stopSession(false);return; }
+      closeModal(open.id, true);
+    }
+  });
   let completed = new Map();
   let currentPromptIndex = 0;
   let timerId = null;
@@ -134,6 +251,14 @@
   let activePracticeSituation = '';
   let sessionActive = false;
   let speechStartedAt = 0;
+  let selectedPracticeDuration = 10;
+  let backendVoiceSessionId = null;
+  let voicePromptCount = 0;
+  const voicePrompts = {
+    free:['Your friend is visiting your city. What would you suggest they see?','Tell me about something you enjoyed doing recently.','What is one goal you are working toward?','Describe a place where you like to relax.','What would make your day a little better?'],
+    guided:['How do you usually spend your weekends?','What is one thing you would like to learn this year?','Describe a place you would like to visit.','Tell me about a meal you enjoy.','What helps you feel confident in a conversation?'],
+    challenge:['Introduce yourself in three clear sentences.','Make a polite request for help.','Describe your morning in 20 seconds.','Share one idea and give a reason.','Ask a thoughtful follow-up question.']
+  };
   const placementQuiz = [
     ['She ___ to work by bus every day.',['go','goes','going','is go'],1,'With he, she or it in the present simple, add -s to the verb.'],
     ['We ___ dinner when the lights went out.',['have','are having','were having','has'],2,'The past continuous describes an action in progress when another past event happened.'],
@@ -201,14 +326,31 @@
     ['You finish speaking and want the other person’s view.',['That is my view. What do you think?','I finished, go.','You agree with me.','No more questions.'],0,'Invite the other person to respond with an open question.']
   ].map(([q, options, answer, why]) => ({q, options, answer, why}));
   let placement = null;
+  const placementResultKey = 'northstar-level-check-result';
+  function updatePlacementCardResult(result) {
+    const node = $('#placementCardResult');
+    if (!node) return;
+    node.textContent = result ? `Last result: ${result.score}/20 · Suggested level: ${result.level}` : 'Choose a test to find your starting level.';
+  }
+  try { updatePlacementCardResult(JSON.parse(localStorage.getItem(placementResultKey) || 'null')); }
+  catch (_) { updatePlacementCardResult(null); }
+  $('#openPlacement')?.addEventListener('click', () => {
+    openReadingModal('placementModal', 'level-check');
+  });
   const vocabularyWords = [
-    ['People','colleague','a person you work with','My colleague helped me prepare for the meeting.'],['People','neighbour','a person living near you','Our neighbour speaks three languages.'],['People','customer','a person who buys a product or service','The customer asked for more information.'],['People','audience','the people watching or listening','The audience asked thoughtful questions.'],['People','relative','a person in your family','A relative is visiting us this weekend.'],
-    ['Everyday','appointment','an arranged time to meet someone','I have a dentist appointment at noon.'],['Everyday','nearby','not far away','There is a pharmacy nearby.'],['Everyday','borrow','to use something and return it later','May I borrow your umbrella?'],['Everyday','enough','as much or as many as needed','We have enough time to review this.'],['Everyday','usually','most of the time','I usually walk to the station.'],
-    ['Travel','platform','the area beside a railway track where passengers wait','Our train leaves from platform four.'],['Travel','reservation','an arrangement to keep a seat or room','I made a reservation for two nights.'],['Travel','luggage','bags and cases used while travelling','Please keep your luggage with you.'],['Travel','destination','the place someone is travelling to','Kyoto is our final destination.'],['Travel','boarding','getting onto a plane, ship or train','Boarding begins in twenty minutes.'],
-    ['Work','deadline','the latest time something must be finished','The deadline for the draft is Friday.'],['Work','feedback','comments that help someone improve','Her feedback helped me make the report clearer.'],['Work','prioritise','to decide what is most important first','Let’s prioritise the urgent customer requests.'],['Work','schedule','a plan showing when things will happen','I’ll check my schedule and confirm.'],['Work','collaborate','to work together with other people','The teams collaborate on product research.'],
-    ['Study','review','to study something again','I review new words before the lesson.'],['Study','evidence','information that helps show whether something is true','The essay uses evidence from two studies.'],['Study','summarise','to give the main points briefly','Can you summarise the chapter in a few lines?'],['Study','assignment','a piece of work given to a student','Our assignment is due next Monday.'],['Study','accurate','correct and free from mistakes','Check that the dates are accurate.'],
-    ['Feelings','confident','feeling sure about your ability','I feel more confident after practising.'],['Feelings','relieved','feeling less worried after difficulty','She was relieved when the exam ended.'],['Feelings','curious','wanting to learn or know more','The children were curious about the map.'],['Feelings','frustrated','annoyed because something is difficult','I felt frustrated but tried another method.'],['Feelings','grateful','feeling thankful','I’m grateful for your patient explanation.']
-  ].map(([category, word, meaning, example]) => ({category, word, meaning, example}));
+    {category:'People',word:'colleague',part:'noun',hindi:'सहकर्मी',meaning:'A person you work with.',examples:[['My colleague helped me prepare for the meeting.','मेरे सहकर्मी ने मीटिंग की तैयारी में मेरी मदद की।'],['She is a colleague from the sales team.','वह सेल्स टीम की मेरी सहकर्मी है।'],['I had lunch with a colleague today.','आज मैंने एक सहकर्मी के साथ दोपहर का खाना खाया।']],similar:['coworker','teammate']},
+    {category:'People',word:'neighbour',part:'noun',hindi:'पड़ोसी',meaning:'A person who lives near you.',examples:[['Our neighbour speaks three languages.','हमारे पड़ोसी तीन भाषाएँ बोलते हैं।'],['I spoke to my neighbour yesterday.','मैंने कल अपने पड़ोसी से बात की।'],['The neighbours are very kind.','पड़ोसी बहुत दयालु हैं।']],similar:['local','resident']},
+    {category:'People',word:'customer',part:'noun',hindi:'ग्राहक',meaning:'A person who buys something or uses a service.',examples:[['The customer asked for more information.','ग्राहक ने और जानकारी माँगी।'],['A customer paid by card.','एक ग्राहक ने कार्ड से भुगतान किया।'],['We listen to every customer.','हम हर ग्राहक की बात सुनते हैं।']],similar:['buyer','client']},
+    {category:'People',word:'audience',part:'noun',hindi:'दर्शक · श्रोता',meaning:'The people watching or listening.',examples:[['The audience asked thoughtful questions.','दर्शकों ने सोच-समझकर सवाल पूछे।'],['She spoke to a large audience.','उन्होंने बड़े दर्शक समूह से बात की।'],['The audience enjoyed the talk.','दर्शकों ने बातचीत का आनंद लिया।']],similar:['listeners','viewers']},
+    {category:'Work',word:'task',part:'noun',hindi:'काम · कार्य',meaning:'A piece of work that you need to do.',examples:[['I finished my first task.','मैंने अपना पहला काम पूरा किया।'],['This task is easy.','यह काम आसान है।'],['We can do the task together.','हम यह काम साथ कर सकते हैं।']],similar:['job','activity']},
+    {category:'Work',word:'meeting',part:'noun',hindi:'बैठक',meaning:'A time when people come together to talk or work.',examples:[['The meeting starts at ten.','बैठक दस बजे शुरू होती है।'],['We have a team meeting today.','आज हमारी टीम की बैठक है।'],['Please join the meeting on time.','कृपया बैठक में समय पर आएँ।']],similar:['discussion','session']},
+    {category:'Work',word:'team',part:'noun',hindi:'दल · टीम',meaning:'A group of people who work together.',examples:[['Our team works well together.','हमारी टीम साथ मिलकर अच्छा काम करती है।'],['She is new to the team.','वह टीम में नई है।'],['The team finished the project.','टीम ने परियोजना पूरी की।']],similar:['group','crew']},
+    {category:'Work',word:'plan',part:'noun · verb',hindi:'योजना · योजना बनाना',meaning:'An idea about what you will do, or to decide this in advance.',examples:[['We have a plan for tomorrow.','कल के लिए हमारी एक योजना है।'],['I plan to study after dinner.','मैं रात के खाने के बाद पढ़ने की योजना बना रहा/रही हूँ।'],['Let’s plan the trip together.','आइए यात्रा की योजना साथ बनाएँ।']],similar:['idea','schedule']},
+    {category:'Travel',word:'ticket',part:'noun',hindi:'टिकट',meaning:'A paper or digital pass that lets you travel or enter a place.',examples:[['I bought a train ticket.','मैंने ट्रेन का टिकट खरीदा।'],['Keep your ticket with you.','अपना टिकट अपने पास रखें।'],['How much is a bus ticket?','बस का टिकट कितने का है?']],similar:['pass','fare ticket']},
+    {category:'Travel',word:'station',part:'noun',hindi:'स्टेशन · स्थानक',meaning:'A place where trains or buses stop for people.',examples:[['The station is near the hotel.','स्टेशन होटल के पास है।'],['We met at the bus station.','हम बस स्टेशन पर मिले।'],['The train leaves from this station.','ट्रेन इस स्टेशन से रवाना होती है।']],similar:['terminal','stop']},
+    {category:'Travel',word:'hotel',part:'noun',hindi:'होटल',meaning:'A place where you pay to sleep when you are away from home.',examples:[['Our hotel has a small garden.','हमारे होटल में एक छोटा बगीचा है।'],['I booked a room at the hotel.','मैंने होटल में एक कमरा बुक किया।'],['The hotel is close to the airport.','होटल हवाई अड्डे के पास है।']],similar:['inn','guesthouse']},
+    {category:'Travel',word:'luggage',part:'noun',hindi:'सामान · यात्रा का सामान',meaning:'The bags and cases you take when you travel.',examples:[['My luggage is in the car.','मेरा सामान कार में है।'],['Please keep your luggage close.','कृपया अपना सामान पास रखें।'],['She has one small piece of luggage.','उसके पास सामान का एक छोटा बैग है।']],similar:['baggage','bags']}
+  ];
   const prompts = {
     free: ['Hi! Let’s practise English today. Tell me one small thing that made you smile recently.','What is something you are looking forward to this week?','Tell me about a place you would like to visit and why.'],
     guided: ['Hi! Let’s practise English today. Tell me about your day.','What is one thing you learned recently? How did you learn it?','What would you like to feel more confident doing next week?'],
@@ -236,8 +378,7 @@
       Intermediate:[['Describe routines and experiences','Talk about everyday habits and something that happened recently.','SPEAKING'],['Connect your ideas','Make a longer answer using examples, reasons and contrast.','FLUENCY'],['Share an opinion','State what you think and explain why.','COMMUNICATION'],['Tell a short story','Organise a story with a beginning, a change and an ending.','SPEAKING'],['Understand natural speech','Practise listening for the main idea and useful expressions.','LISTENING'],['Handle a real situation','Rehearse a travel, study or workplace conversation.','SIMULATION']],
       Advanced:[['Choose formal or informal language','Adapt your wording to a friend, colleague or professional audience.','REGISTER'],['Make a clear argument','Present a view, support it and respond to another perspective.','SPEAKING'],['Be concise and precise','Explain a complex point in a shorter, clearer way.','CLARITY'],['Present with confidence','Lead with your main point and finish with a useful next step.','PRESENTATION'],['Discuss abstract topics','Explore a complex issue while making your reasoning easy to follow.','DISCUSSION'],['Review your speaking','Reflect on clarity, structure, word choice and natural pacing.','FLUENCY']]
     };
-    const phrases = localizedPrompts[languageCode];
-    return {subtitle:`build ${targetLevel.toLowerCase()} ${language} skills`,lessons:curriculum[targetLevel].map((item,index)=>({id:`${language.toLowerCase().replace(/[^a-z0-9]+/g,'-')}-${targetLevel.toLowerCase()}-${index+1}`,title:item[0],desc:item[1],type:item[2],time:`${8+index%3*2} min`,notes:commonNotes[targetLevel==='Basic'?0:targetLevel==='Intermediate'?1:2],practice:phrases?.[index%phrases.length] || `Practise this in ${language}: ${item[1]}`}))};
+    return {subtitle:`build ${targetLevel.toLowerCase()} ${language} skills`,lessons:curriculum[targetLevel].map((item,index)=>({id:`${language.toLowerCase().replace(/[^a-z0-9]+/g,'-')}-${targetLevel.toLowerCase()}-${index+1}`,title:item[0],desc:item[1],type:item[2],time:`${8+index%3*2} min`,notes:commonNotes[targetLevel==='Basic'?0:targetLevel==='Intermediate'?1:2],practice:`Talk about ${item[0]}. ${item[1]}`}))};
   }
   function currentLessons() { return getCourse(level).lessons; }
   async function applyLanguageSelection() {
@@ -252,20 +393,10 @@
     await saveProfile();
   }
   function refreshLanguage() {
-    const englishCourse = language.toLowerCase() === 'english';
-    const previousLevel = level;
-    $('#levelSelect').disabled = !englishCourse;
-    if (!englishCourse) { level = 'Basic'; $('#levelSelect').value = 'Basic'; }
-    else $('#levelSelect').value = level;
-    if (!englishCourse && previousLevel !== 'Basic') saveProfile(true);
+    $('#levelSelect').disabled = false;
+    $('#levelSelect').value = level;
     $('#languageFeatureTitle').textContent=language;
     $$('.target-language-inline').forEach(node=>node.textContent=language);
-    $('#videoLanguageLabel').textContent=language;
-    const query=(subject)=>encodeURIComponent(`${language} ${level} language learning ${subject}`);
-    $('#videoYouTube').href=`https://www.youtube.com/results?search_query=${query('speaking vocabulary pronunciation')}`;
-    $('#videoGoogle').href=`https://www.google.com/search?tbm=vid&q=${query('language course lessons')}`;
-    $('#videoTed').href=`https://www.bing.com/videos/search?q=${query('talks listening practice')}`;
-    $('#allVideoResults').href=`https://www.youtube.com/results?search_query=${query('language learning lessons')}`;
     renderLessons();
   }
   const languageSelect=$('#languageSelect');
@@ -431,25 +562,45 @@
     window.scrollTo({top:0,behavior:'smooth'});
   }
   $$('.side-link,[data-section]').forEach(button => button.addEventListener('click', () => switchSection(button.dataset.section)));
-  $$('.text-action[data-scroll]').forEach(button => button.addEventListener('click', () => document.getElementById(button.dataset.scroll).scrollIntoView({behavior:'smooth',block:'start'})));
+  $$('.text-action[data-scroll],.writing-launch-card[data-scroll]').forEach(button => button.addEventListener('click', () => document.getElementById(button.dataset.scroll).scrollIntoView({behavior:'smooth',block:'start'})));
+  const mainTrackCard=$('[data-main-track]');
+  function startMainTrack(){switchSection('language');window.setTimeout(()=>$('#curriculum').scrollIntoView({behavior:'smooth',block:'start'}),160);}
+  mainTrackCard.addEventListener('click',startMainTrack);
+  mainTrackCard.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();startMainTrack();}});
 
   function renderPlacementQuestion() {
     if (!placement) return;
     const item = placement.items[placement.index];
     $('#placementModeLabel').textContent = `${placement.label} · ENGLISH`;
     $('#placementQuestionTitle').textContent = `Question ${placement.index + 1} of ${placement.items.length}`;
-    $('#placementProgressFill').style.width = `${((placement.index + 1) / placement.items.length) * 100}%`;
+    $('#placementProgressFill').innerHTML = placement.items.map((_, index) => `<i class="${index < placement.index ? 'is-done' : index === placement.index ? 'is-current' : ''}"></i>`).join('');
     $('#placementStem').textContent = item.q;
-    $('#placementOptions').innerHTML = item.options.map((option, index) => `<button class="placement-option${placement.answers[placement.index] === index ? ' selected' : ''}" type="button" data-placement-option="${index}"><span>${String.fromCharCode(65 + index)}</span>${safeText(option)}</button>`).join('');
+    $('#placementOptions').innerHTML = item.options.map((option, index) => `<button class="placement-option${placement.answers[placement.index] === index ? ' selected' : ''}" type="button" data-placement-option="${index}"><span class="placement-radio" aria-hidden="true"></span><span class="placement-option-copy">${safeText(option)}</span><kbd>${index + 1}</kbd></button>`).join('');
+    $('#placementFeedback')?.remove();
     $('#placementOptions').querySelectorAll('[data-placement-option]').forEach(button => button.addEventListener('click', () => {
+      if (placement.answerRevealed) return;
       placement.answers[placement.index] = Number(button.dataset.placementOption);
       $('#placementOptions').querySelectorAll('.placement-option').forEach(option => option.classList.toggle('selected', option === button));
       $('#placementNext').disabled = false;
-      $('#placementStatus').textContent = 'Answer saved for this question.';
+      $('#placementStatus').textContent = 'Press “Check answer” when you’re ready.';
     }));
-    $('#placementNext').textContent = placement.index === placement.items.length - 1 ? 'Submit test →' : 'Next question →';
+    $('#placementNext').textContent = placement.answerRevealed ? (placement.index === placement.items.length - 1 ? 'See results →' : 'Next question →') : 'Check answer →';
     $('#placementNext').disabled = placement.answers[placement.index] === null;
-    $('#placementStatus').textContent = placement.answers[placement.index] === null ? 'Choose an answer to continue.' : 'Answer saved for this question.';
+    $('#placementStatus').textContent = placement.answers[placement.index] === null ? 'Choose an answer to continue.' : placement.answerRevealed ? 'Press Enter to continue.' : 'Press “Check answer” when you’re ready.';
+    $('#placementQuestionCount').textContent = `${placement.answers.filter(answer => answer !== null).length} answered`;
+    if (placement.answerRevealed) showPlacementFeedback();
+  }
+  function showPlacementFeedback() {
+    const item = placement.items[placement.index], chosen = placement.answers[placement.index];
+    $('#placementOptions').querySelectorAll('.placement-option').forEach((option, index) => {
+      option.classList.toggle('is-correct', index === item.answer);
+      option.classList.toggle('is-incorrect', index === chosen && chosen !== item.answer);
+      option.disabled = true;
+    });
+    const feedback = document.createElement('section');
+    feedback.id = 'placementFeedback'; feedback.className = `placement-feedback ${chosen === item.answer ? 'is-correct' : 'is-incorrect'}`;
+    feedback.innerHTML = `<strong>${chosen === item.answer ? 'That’s right' : 'A good one to learn'}</strong><p>${safeText(item.why)}</p>`;
+    $('#placementOptions').after(feedback);
   }
   function finishPlacement() {
     const score = placement.items.reduce((sum, item, index) => sum + (placement.answers[index] === item.answer ? 1 : 0), 0);
@@ -459,7 +610,11 @@
       const correct = chosen === item.answer;
       return `<article class="placement-review-item ${correct ? 'is-correct' : 'is-incorrect'}"><strong>${index + 1}. ${safeText(placement.kind === 'sentences' ? item.q : item.q)}</strong><p>Your answer: ${chosen === null ? 'Not answered' : safeText(item.options[chosen])}</p>${!correct ? `<p>Correct answer: ${safeText(item.options[item.answer])}</p>` : ''}<small>${safeText(item.why)}</small></article>`;
     }).join('');
-    $('#placementResults').innerHTML = `<div class="placement-result-summary"><strong>${score} / 20</strong><span>Suggested starting level: <b>${suggested}</b></span><button type="button" class="quiet-button" id="applySuggestedLevel">Use ${suggested} level</button></div><p>Review every answer below. This is a short English placement estimate, not a formal proficiency certificate.</p><div class="placement-review-list">${review}</div>`;
+    const result = {score, level:suggested, test:placement.label, completedAt:new Date().toISOString()};
+    try { localStorage.setItem(placementResultKey, JSON.stringify(result)); } catch (_) {}
+    updatePlacementCardResult(result);
+    const cefr = score >= 18 ? 'C1' : score >= 16 ? 'B2' : score >= 12 ? 'B1' : score >= 8 ? 'A2' : 'A1';
+    $('#placementResults').innerHTML = `<div class="placement-result-hero"><div class="placement-level-badge"><strong>${cefr}</strong><span>LEVEL</span></div><div><span class="placement-result-kicker">${safeText(suggested)} starting point</span><h2>${cefr === 'A1' ? 'A fresh start.' : cefr === 'A2' ? 'You’re building confidence.' : cefr === 'B1' ? 'Intermediate. Good start!' : 'Strong work. Keep going!'}</h2><p>Your score gives you a practical place to continue learning.</p><strong class="placement-score">${score} / 20 <small>correct answers</small></strong></div></div><div class="placement-result-columns"><article><h3><i>✓</i> Strong areas</h3><p>Everyday communication</p><p>Understanding common English</p><p>${score >= 12 ? 'Clear sentence choices' : 'Building useful vocabulary'}</p></article><article><h3><i>!</i> Practise next</h3><p>Complete sentences</p><p>Polite requests and responses</p><p>Grammar and word choice</p></article></div><div class="placement-result-actions"><button type="button" class="primary-button" id="placementTryAnother">Try another test</button><button type="button" class="quiet-button" id="placementRetry">Retry this test</button><button type="button" class="placement-review-link" id="placementReviewToggle">Review my answers</button><button type="button" class="quiet-button" id="applySuggestedLevel">Use ${suggested} level</button></div><p class="placement-result-note">This is a short English placement estimate, not a formal proficiency certificate.</p><div class="placement-review-list" hidden>${review}</div>`;
     $('#placementResults').hidden = false;
     $('#placementNext').hidden = true;
     $('#placementOptions').hidden = true;
@@ -469,32 +624,86 @@
       level = suggested; $('#levelSelect').value = level; refreshLanguage(); await saveProfile();
       showToast(`Your learning level is now ${level}.`);
     });
+    $('#placementReviewToggle').addEventListener('click', () => { const list=$('#placementResults .placement-review-list'); list.hidden=!list.hidden; $('#placementReviewToggle').textContent=list.hidden?'Review my answers':'Hide answer review'; });
+    $('#placementRetry').addEventListener('click', () => startPlacement(placement.kind));
+    $('#placementTryAnother').addEventListener('click', () => { $('#placementResults').hidden=true; $('#placementSession').hidden=true; $('#placementTypes').hidden=false; placement=null; });
+  }
+  function startPlacement(kind) {
+    const items = kind === 'conversation' ? placementConversation : kind === 'sentences' ? placementSentences : placementQuiz;
+    placement = {kind, label:kind === 'quiz' ? 'Grammar & vocabulary' : kind === 'sentences' ? 'Sentence building' : 'Conversation choices', items, index:0, answers:Array(items.length).fill(null), answerRevealed:false};
+    $('#placementTypes').hidden = true; $('#placementSession').hidden = false; $('#placementResults').hidden = true; $('#placementNext').hidden = false;
+    $('#placementOptions').hidden = false; $('#placementStem').hidden = false;
+    renderPlacementQuestion(); $('#placementModal .detail-modal').scrollTop = 0;
   }
   $$('.placement-type').forEach(button => button.addEventListener('click', () => {
-    const kind = button.dataset.placement;
     const englishOnly = languageCode === 'en';
     if (!englishOnly) { showToast('Reviewed placement tests are currently available for English only.'); return; }
-    const items = kind === 'conversation' ? placementConversation : kind === 'sentences' ? placementSentences : placementQuiz;
-    placement = {kind, label:kind === 'quiz' ? 'Grammar & vocabulary' : kind === 'sentences' ? 'Sentence building' : 'Conversation choices', items, index:0, answers:Array(items.length).fill(null)};
-    $('#placementSession').hidden = false; $('#placementResults').hidden = true; $('#placementNext').hidden = false;
-    $('#placementOptions').hidden = false; $('#placementStem').hidden = false;
-    $('#placementSession').scrollIntoView({behavior:'smooth', block:'start'}); renderPlacementQuestion();
+    startPlacement(button.dataset.placement);
   }));
   $('#placementNext').addEventListener('click', () => {
     if (!placement || placement.answers[placement.index] === null) return;
+    if (!placement.answerRevealed) { placement.answerRevealed=true; showPlacementFeedback(); $('#placementNext').textContent=placement.index === placement.items.length - 1 ? 'See results →' : 'Next question →'; $('#placementStatus').textContent='Press Enter to continue.'; return; }
     if (placement.index === placement.items.length - 1) finishPlacement();
-    else { placement.index++; renderPlacementQuestion(); }
+    else { placement.index++; placement.answerRevealed=false; renderPlacementQuestion(); }
   });
-  $('#placementExit').addEventListener('click', () => { placement = null; $('#placementSession').hidden = true; });
+  $('#placementExit').addEventListener('click', () => { placement = null; $('#placementSession').hidden = true; $('#placementTypes').hidden = false; $('#placementModal .detail-modal').scrollTop = 0; });
+  document.addEventListener('keydown', event => {
+    if ($('#placementModal').hidden || !placement || $('#placementSession').hidden) return;
+    if (/^[1-4]$/.test(event.key) && !placement.answerRevealed) { const option=$(`#placementOptions [data-placement-option="${Number(event.key)-1}"]`); option?.click(); }
+    if (event.key === 'Enter' && !$('#placementNext').disabled) { event.preventDefault(); $('#placementNext').click(); }
+  });
 
   const translationChoices=languages.filter(([,code])=>code).map(([name,code])=>`<option value="${safeText(code)}">${safeText(name)}</option>`).join('');
   $('#translateFrom').innerHTML=translationChoices;
   $('#translateTo').innerHTML=translationChoices;
   $('#translateFrom').value='en';$('#translateTo').value='hi';
-  $('#translateSwap').addEventListener('click', () => { const from=$('#translateFrom'),to=$('#translateTo'); const old=from.value;from.value=to.value;to.value=old; });
+  const keyboardLanguage=$('#translatorKeyboardLanguage');keyboardLanguage.innerHTML=translationChoices;keyboardLanguage.value='en';
+  const romanKeyboardLanguages=new Set(['ar','bn','fa','gu','hi','ja','mr','ne','pa','ru','ta','te','ur','zh']);
+  const latinKeyboardLanguages=new Set(['en','es','fr','de','it','pt','nl','id','pl','sw','tr','vi']);
+  const nativePreview=$('#translatorNativePreview'),nativePreviewText=$('#translatorNativeText');
+  function resetTranslatorNativePreview(){nativePreview.hidden=true;nativePreview.dataset.original='';nativePreview.dataset.language='';nativePreviewText.value='';}
+  const keyboardRows={
+    hi:['ौैाीूाभगद','ोे्िुपयरत','ंमजनवलसहक'],ne:['ौैाीूाभगद','ोे्िुपयरत','ंमजनवलसहक'],bn:['ৌৈাীূভগদ','োে্িুপযরত','ংমজনবলসহক'],
+    gu:['ૌૈાીૂભઘદ','ોે્િુપયરત','ંમજનવલસહક'],pa:['ੌੈਾੀੂਭਘਦ','ੋੇ੍ਿੁਪਯਰਤ','ੰਮਜਨਵਲਸਹਕ'],
+    mr:['ौैाीूाभगद','ोे्िुपयरत','ंमजनवलसहक'],ne:['ौैाीूाभगद','ोे्िुपयरत','ंमजनवलसहक'],
+    ta:['ௌைாீூபகத','ோே்ிுமயரல','னவளசடணழ'],te:['ౌైాీూభగద','ోే్ిుపయరత','ంమనవలసహక'],
+    ar:['ضصثقفغعهخحجد','شسيبلاتنمكط','ئءؤرلاىةوزظ'],ur:['ٹثقفغعهخحجد','شسیبلاتنمکط','ئءؤرلاےوزظ'],he:['קראטוןםפשד','שךץגכעיחלך','זסבהנמצת'],
+    fa:['ضصثقفغعهخحجد','شسیبلاتنمکط','ئءؤرلاےوزظ'],ru:['йцукенгшщзх','фывапролджэ','ячсмитьбю'],uk:['йцукенгшщзх','фівапролджє','ячсмитьбю'],
+    ml:['ൗൈാീൂകഗദ','ോേ്ിുപയരത','ംമനവലസഹ'],kn:['ೌೈಾೀೂಕಗದ','ೋೇ್ಿುಪಯರತ','ಂಮನವಲಸಹ'],
+    el:[';ςερτυθιοπ','ασδφγηξκλ','ζχψωβνμ'],ja:['あいうえおかきくけこ','さしすせそたちつてと','なにぬねのはひへほ','まみむめもやゆよわん'],
+    zh:['你好我是你他我们','的了在不有这中大为','人上个国到说们和子'],ko:['ㅂㅈㄷㄱㅅㅛㅕㅑㅐㅔ','ㅁㄴㅇㄹㅎㅗㅓㅏㅣ','ㅋㅌㅊㅍㅠㅜㅡ'],th:['ๆไำพะัีรนยบ','ฟหกดเ้่าสวง','ผปแอิืทมใฝ']
+  };
+  const latinExtras={es:'áéíóúüñ¿¡',fr:'àâçéèêëîïôùûüÿœ',de:'äöüß',it:'àèéìíîòóù',pt:'áâãàçéêíóôõú',tr:'çğıöşü',vi:'ăâđêôơưáàảãạ',pl:'ąćęłńóśźż',nl:'ëïÿ'};
+  function syncTranslatorLabels(){const from=$('#translateFrom'),to=$('#translateTo');const fromName=from.selectedOptions[0]?.text||'English',toName=to.selectedOptions[0]?.text||'Hindi';$('#translatorFromLabel').textContent=fromName.toUpperCase();$('#translatorToLabel').textContent=to.value==='hi'?'हिन्दी':toName;$('#translateInput').lang=from.value;$('#translateInput').dir=['ar','fa','he','ur'].includes(from.value)?'rtl':'ltr';$('#translateOutput').lang=to.value;$('#translateOutput').dir=['ar','fa','he','ur'].includes(to.value)?'rtl':'ltr';if(keyboardLanguage.value!==from.value)keyboardLanguage.value=from.value;renderTranslatorKeyboard();}
+  syncTranslatorLabels();$('#translateFrom').addEventListener('change',()=>{resetTranslatorNativePreview();$('#translateOutput').textContent='';syncTranslatorLabels();});$('#translateTo').addEventListener('change',()=>{$('#translateOutput').textContent='';syncTranslatorLabels();});
+  function renderTranslatorKeyboard(){
+    const code=keyboardLanguage.value||$('#translateFrom').value,mode=$('#translatorInputMethod').value,keys=$('#translatorVirtualKeys'),hint=$('#translatorKeyboardHint');
+    const name=languages.find(([,languageCode])=>languageCode===code)?.[0]||'this language';
+    hint.textContent=mode==='roman'?(romanKeyboardLanguages.has(code)?`Type ${name} with English letters. It will be converted before translation.`:latinKeyboardLanguages.has(code)?`Type ${name} normally with English letters. Use on-screen keys for accents.`:`Roman typing is not supported for ${name}; choose on-screen keys or use your device keyboard.`):`Choose ${name} characters below, or use your device’s ${name} keyboard.`;
+    if(mode==='roman'){keys.hidden=true;keys.innerHTML='';return;}
+    keys.hidden=false;
+    let rows=keyboardRows[code];
+    if(!rows){const extras=latinExtras[code]||'';rows=[...(extras?[extras]:[]),'qwertyuiop','asdfghjkl','zxcvbnm'];}
+    keys.innerHTML=rows.map(row=>`<div class="translator-key-row">${Array.from(row).map(char=>`<button type="button" data-key-value="${safeText(char)}">${safeText(char)}</button>`).join('')}</div>`).join('')+`<div class="translator-key-row translator-key-row-actions"><button type="button" data-key-value=" ">Space</button><button type="button" data-key-value="BACKSPACE">⌫</button></div>`;
+    $$('[data-key-value]',keys).forEach(button=>button.addEventListener('click',()=>{
+      const input=$('#translateInput'),value=button.dataset.keyValue,start=input.selectionStart,end=input.selectionEnd;
+      if(value==='BACKSPACE')input.setRangeText('',start===end?Math.max(0,start-1):start,end,'end');
+      else input.setRangeText(value,start,end,'end');
+      input.dispatchEvent(new Event('input',{bubbles:true}));input.focus();
+    }));
+  }
+  keyboardLanguage.addEventListener('change',()=>{$('#translateFrom').value=keyboardLanguage.value;syncTranslatorLabels();});
+  $('#translatorInputMethod').addEventListener('change',renderTranslatorKeyboard);
+  $('#translatorKeyboardToggle').addEventListener('click',()=>{const panel=$('#translatorKeyboardPanel'),open=panel.hidden;panel.hidden=!open;$('#translatorKeyboardToggle').setAttribute('aria-expanded',String(open));if(open)renderTranslatorKeyboard();});
+  $('#translateSwap').addEventListener('click', () => { const from=$('#translateFrom'),to=$('#translateTo'); const old=from.value;from.value=to.value;to.value=old;resetTranslatorNativePreview();$('#translateOutput').textContent='';syncTranslatorLabels(); });
+  function speakTranslation(text,code) { if(!text.trim())return; if(!('speechSynthesis' in window)){showToast('Speech playback is not available in this browser.');return;} window.speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(text);utterance.lang=languages.find(([,languageCode])=>languageCode===code)?.[2]||code;window.speechSynthesis.speak(utterance); }
+  $('#translatorClear').addEventListener('click',()=>{$('#translateInput').value='';$('#translateOutput').textContent='';resetTranslatorNativePreview();$('#translateInput').focus();});
+  $('#translatorHear').addEventListener('click',()=>speakTranslation($('#translateOutput').textContent,$('#translateTo').value));
+  $('#translatorCopy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('#translateOutput').textContent);showToast('Translation copied.');}catch(_){showToast('Copy is not available here.');}});
+  $('#translatorSpeak').addEventListener('click',()=>{const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SpeechRecognition){showToast('Voice input is not available in this browser.');return;}const recognition=new SpeechRecognition();const code=$('#translateFrom').value;recognition.lang=languages.find(([,languageCode])=>languageCode===code)?.[2]||code;recognition.continuous=false;recognition.interimResults=false;recognition.onresult=event=>{$('#translateInput').value=event.results[0][0].transcript;};recognition.onerror=()=>showToast('I could not hear that. Please try again.');try{recognition.start();}catch(_){showToast('The microphone could not start.');}});
   $('#translateLearningLanguage').addEventListener('click', () => {
     const targetCode = languageCode || 'en';
-    if ([...$('#translateTo').options].some(option => option.value === targetCode)) $('#translateTo').value = targetCode;
+    if ([...$('#translateTo').options].some(option => option.value === targetCode)) {$('#translateTo').value = targetCode;syncTranslatorLabels();}
     else $('#translateOutput').textContent = `${language} is not in the translator's current language list.`;
   });
   $('#translateButton').addEventListener('click', async () => {
@@ -504,32 +713,67 @@
     if(from===to){$('#translateOutput').textContent='Choose two different languages.';return;}
     $('#translateButton').disabled=true;$('#translateOutput').textContent='Translating…';
     try {
-      const pair=`${from}|${to}`;
-      const response=await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${encodeURIComponent(pair)}`);
-      if(!response.ok) throw new Error('translation unavailable');
-      const data=await response.json();
-      const translated=data?.responseData?.translatedText;
-      if(!translated || data.responseStatus !== 200) throw new Error('translation unavailable');
+      let sourceText=text;
+      const hasReviewedNativeText=!nativePreview.hidden&&nativePreview.dataset.original===text&&nativePreview.dataset.language===from&&nativePreviewText.value.trim();
+      if(hasReviewedNativeText)sourceText=nativePreviewText.value.trim();
+      else if($('#translatorInputMethod').value==='roman'&&romanKeyboardLanguages.has(from)&&/[A-Za-z]/.test(text)&&!(/[^\x00-\x7f]/.test(text))){
+        const response=await fetch('/api/learning/transliterate',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({text,language:from})});
+        if(!response.ok){const failure=await response.json().catch(()=>({}));throw new Error(failure.detail||'Roman typing is not available for this language.');}
+        const data=await response.json();sourceText=data.text;nativePreviewText.value=sourceText;nativePreviewText.lang=from;nativePreviewText.dir=['ar','fa','he','ur'].includes(from)?'rtl':'ltr';nativePreview.dataset.original=text;nativePreview.dataset.language=from;nativePreview.hidden=false;
+        const fromName=$('#translateFrom').selectedOptions[0]?.text||'selected language';$('#translatorNativePreviewLabel').textContent=`Recognized ${fromName} · edit if needed`;
+      }
+      const translated=await translateWithGoogle(sourceText,from,to);
       $('#translateOutput').textContent=translated;
-    } catch (_) { $('#translateOutput').textContent='Translation could not be reached. Check your connection and try again.'; }
+    } catch (error) { $('#translateOutput').textContent=error.message||'Translation could not be reached. Check your connection and try again.'; }
     finally { $('#translateButton').disabled=false; }
   });
+  $('#translateInput').addEventListener('input',()=>{if(nativePreview.dataset.original&&nativePreview.dataset.original!==$('#translateInput').value.trim())resetTranslatorNativePreview();$('#translateOutput').textContent='';});
+  nativePreviewText.addEventListener('input',()=>{$('#translateOutput').textContent='';});
   $('#translateInput').addEventListener('keydown', event => {if((event.ctrlKey||event.metaKey)&&event.key==='Enter')$('#translateButton').click();});
 
   const vocabularyKey='northstar-vocabulary-progress';
   const loadVocabularyProgress=()=>{try{return JSON.parse(localStorage.getItem(vocabularyKey)||'{}')}catch(_){return {}}};
   let vocabularyProgress=loadVocabularyProgress();
+  let activeVocabularyWord=null;
   $('#vocabularyGoal').value=String(vocabularyProgress.goal||10);
+  function updateVocabularyDashboard(){const stats=$('#vocabularyDashboardStats'),fill=$('#vocabularyDashboardProgress');if(!stats||!fill)return;const today=new Date().toISOString().slice(0,10),learned=Object.keys(vocabularyProgress.learned||{}).filter(word=>vocabularyProgress.learned[word]===today).length,target=Number($('#vocabularyGoal').value||10);stats.textContent=`${learned} / ${target} today`;fill.style.width=`${Math.min(100,Math.round(learned/target*100))}%`;}
   function renderVocabulary() {
+    activeVocabularyWord=null;$('#vocabularyModal .vocabulary-detail-modal').classList.remove('word-detail-open');$('#vocabularyKicker').textContent='YOUR PERSONAL WORD BANK';if($('#vocabularyModalTitle'))$('#vocabularyModalTitle').hidden=false;const textSizeControl=$('#vocabularyModal').querySelector('.text-size-control');if(textSizeControl)textSizeControl.hidden=false;
+    $('#vocabularyBack').hidden=true;$('#vocabularyNext').hidden=true;$('#vocabularyFooterLearn').hidden=true;$('#vocabularyFooterHint').hidden=false;$('#vocabularyListClose').hidden=false;
     const category=$('#vocabularyCategory').value, query=$('#vocabularySearch').value.trim().toLowerCase();
     const today=new Date().toISOString().slice(0,10), dayWords=Object.keys(vocabularyProgress.learned||{}).filter(word=>vocabularyProgress.learned[word]===today).length;
     const target=Number($('#vocabularyGoal').value||10);
-    $('#vocabularyDaily').textContent=`Today: ${dayWords} of ${target} words marked learned · Goal: ${target} words`;
+    $('#vocabularyDaily').textContent=`Today: ${dayWords} of ${target} words marked learned`;
     $('#vocabularyProgressFill').style.width=`${Math.min(100,Math.round(dayWords/target*100))}%`;
-    const rows=vocabularyWords.filter(item=>(category==='all'||item.category===category)&&(!query||`${item.word} ${item.meaning} ${item.category}`.toLowerCase().includes(query)));
-    $('#vocabularyList').innerHTML=rows.map(item=>`<article class="vocabulary-word"><div><span class="vocabulary-category">${safeText(item.category)}</span><strong>${safeText(item.word)}</strong><p>${safeText(item.meaning)}</p><small>${safeText(item.example)}</small></div><button type="button" class="vocabulary-learned${vocabularyProgress.learned?.[item.word]===today?' is-learned':''}" data-vocabulary-learn="${safeText(item.word)}">${vocabularyProgress.learned?.[item.word]===today?'Learned ✓':'Mark learned'}</button></article>`).join('') || '<p class="vocabulary-empty">No starter words match. Press Enter to look this word up in the online English dictionary.</p>';
-    $$('.vocabulary-learned').forEach(button=>button.addEventListener('click',()=>{vocabularyProgress.learned ||= {};const word=button.dataset.vocabularyLearn;if(vocabularyProgress.learned[word]===today)delete vocabularyProgress.learned[word];else vocabularyProgress.learned[word]=today;vocabularyProgress.goal=target;localStorage.setItem(vocabularyKey,JSON.stringify(vocabularyProgress));renderVocabulary();}));
+    updateVocabularyDashboard();
+    const rows=vocabularyWords.filter(item=>(category==='all'||item.category===category)&&(!query||`${item.word} ${item.meaning} ${item.hindi} ${item.category}`.toLowerCase().includes(query)));
+    $('#vocabularyList').innerHTML=rows.map(item=>`<article class="vocab-word-card"><button class="vocab-word-open" type="button" data-word-open="${safeText(item.word)}"><span class="vocab-word-heading"><strong>${safeText(item.word)}</strong><em>${safeText(item.part)}</em></span><span class="vocab-hindi" lang="hi">${safeText(item.hindi)}</span><span class="vocab-english-meaning">${safeText(item.meaning)}</span><span class="vocab-example">${safeText(item.examples[0][0])}</span></button><div class="vocab-word-actions"><button type="button" class="vocabulary-learned${vocabularyProgress.learned?.[item.word]===today?' is-learned':''}" data-vocabulary-learn="${safeText(item.word)}">${vocabularyProgress.learned?.[item.word]===today?'✓ Learned':'Mark learned'}</button><button type="button" class="vocab-open-link" data-word-open="${safeText(item.word)}">Open →</button></div></article>`).join('') || '<p class="vocabulary-empty">No words match this search. Try another word or use Look up word.</p>';
+    if (!$('#vocabularyModal').hidden) installReaderContent($('#vocabularyModalBody'), 'Vocabulary', 'Learn useful words for everyday life, study, travel and work.');
   }
+  function toggleVocabularyLearned(word) {
+    const today=new Date().toISOString().slice(0,10); vocabularyProgress.learned ||= {};
+    if(vocabularyProgress.learned[word]===today) delete vocabularyProgress.learned[word]; else vocabularyProgress.learned[word]=today;
+    vocabularyProgress.goal=Number($('#vocabularyGoal').value||10); localStorage.setItem(vocabularyKey,JSON.stringify(vocabularyProgress));
+  }
+  function pronounceWord(word) { if(!('speechSynthesis' in window)) { showToast('Speech playback is not available in this browser.'); return; } window.speechSynthesis.cancel(); const utterance=new SpeechSynthesisUtterance(word); utterance.lang='en-US'; window.speechSynthesis.speak(utterance); }
+  function renderVocabularyWord(word) {
+    const item=vocabularyWords.find(entry=>entry.word===word); if(!item)return;
+    const today=new Date().toISOString().slice(0,10), learned=vocabularyProgress.learned?.[word]===today;
+    activeVocabularyWord=word;const categoryWords=vocabularyWords.filter(entry=>entry.category===item.category),wordIndex=categoryWords.findIndex(entry=>entry.word===word)+1;
+    const ipa={colleague:'/ˈkɒliːɡ/',neighbour:'/ˈneɪbə/',customer:'/ˈkʌstəmə/',audience:'/ˈɔːdiəns/'}[word]||'';
+    const similarHindi={coworker:'सहकर्मी',teammate:'टीम का साथी',associate:'सहयोगी',local:'स्थानीय व्यक्ति',resident:'निवासी',buyer:'खरीदार',client:'ग्राहक',buddy:'दोस्त',companion:'साथी'};
+    const similarWords=(item.similar||[]).map((similar,index)=>[similar,similarHindi[similar]||'']).concat(word==='colleague'?[['associate','सहयोगी']]:[]);
+    $('#vocabularyKicker').textContent=`VOCABULARY · ${item.category.toUpperCase()} · WORD ${wordIndex} OF ${categoryWords.length}`;const textSizeControl=$('#vocabularyModal').querySelector('.text-size-control');if(textSizeControl)textSizeControl.hidden=true;$('#vocabularyModal .vocabulary-detail-modal').classList.add('word-detail-open');
+    $('#vocabularyList').innerHTML=`<article class="vocab-word-detail"><div class="vocab-detail-title"><div><h3>${safeText(item.word)}</h3><span>${safeText(item.part)}${ipa?` · ${safeText(ipa)}`:''}</span></div><button type="button" class="vocab-speaker vocab-speaker-large" data-pronounce="${safeText(item.word)}" aria-label="Hear ${safeText(item.word)}">◖ Hear it</button></div><div class="vocab-meaning-pair"><section><h4>ENGLISH</h4><p>${safeText(item.meaning)}</p></section><section><h4>हिन्दी</h4><p lang="hi">${safeText(item.hindi)}</p></section></div><section class="vocab-detail-examples"><h4>Use it in a sentence</h4>${item.examples.map(([en,hi])=>`<article><p>${safeText(en)}</p><p lang="hi">${safeText(hi)}</p></article>`).join('')}</section><section class="vocab-similar-words"><h4>Similar words</h4><div>${similarWords.map(([similar,hindi])=>`<span>${safeText(similar)}${hindi?` · <b lang="hi">${safeText(hindi)}</b>`:''}</span>`).join('')}</div></section></article>`;
+    $('#vocabularyList').innerHTML=`<article class="vocab-word-detail"><div class="vocab-detail-title"><div><h3>${safeText(item.word)}</h3><span>${safeText(item.part)}${ipa?` · ${safeText(ipa)}`:''}</span></div><button type="button" class="vocab-speaker vocab-speaker-large" data-pronounce="${safeText(item.word)}" aria-label="Hear ${safeText(item.word)}">◖ Hear it</button></div><div class="vocab-meaning-pair"><section><h4>ENGLISH</h4><p>${safeText(item.meaning)}</p></section><section><h4>हिन्दी</h4><p lang="hi">${safeText(item.hindi)}</p></section></div><section class="vocab-detail-examples"><h4>Use it in a sentence</h4>${item.examples.map(([en,hi])=>`<article><p>${safeText(en)}</p><p lang="hi">${safeText(hi)}</p></article>`).join('')}</section><section class="vocab-similar-words"><h4>Similar words</h4><div>${similarWords.map(([similar,hindi])=>`<span>${safeText(similar)}${hindi?` · <b lang="hi">${safeText(hindi)}</b>`:''}</span>`).join('')}</div></section></article>`;
+    installReaderContent($('#vocabularyModalBody'), 'Vocabulary', '');
+    $('#vocabularyBack').hidden=false;$('#vocabularyNext').hidden=false;$('#vocabularyFooterLearn').hidden=false;$('#vocabularyFooterLearn').textContent=learned?'Learned ✓':'Mark as learned';$('#vocabularyFooterHint').hidden=true;$('#vocabularyListClose').hidden=true;
+    $('#vocabularyBack').disabled=wordIndex<=1;$('#vocabularyNext').disabled=wordIndex>=categoryWords.length;
+    $('#vocabularyModalBody').scrollTop=0;
+  }
+  function moveVocabularyWord(delta){if(!activeVocabularyWord)return;const current=vocabularyWords.find(entry=>entry.word===activeVocabularyWord);const category=vocabularyWords.filter(entry=>entry.category===current.category),index=category.findIndex(entry=>entry.word===activeVocabularyWord),next=category[index+delta];if(next)renderVocabularyWord(next.word);}
+  $('#vocabularyBack').addEventListener('click',()=>moveVocabularyWord(-1));$('#vocabularyNext').addEventListener('click',()=>moveVocabularyWord(1));
+  $('#vocabularyFooterLearn').addEventListener('click',()=>{if(!activeVocabularyWord)return;const word=activeVocabularyWord;toggleVocabularyLearned(word);renderVocabularyWord(word);updateVocabularyDashboard();const today=new Date().toISOString().slice(0,10),count=Object.keys(vocabularyProgress.learned||{}).filter(item=>vocabularyProgress.learned[item]===today).length,target=Number($('#vocabularyGoal').value||10);$('#vocabularyDaily').textContent=`Today: ${count} of ${target} words marked learned`;$('#vocabularyProgressFill').style.width=`${Math.min(100,Math.round(count/target*100))}%`;});
   async function lookupVocabulary() {
     const query=$('#vocabularySearch').value.trim(); if(!query)return;
     const matches=vocabularyWords.some(item=>`${item.word} ${item.meaning}`.toLowerCase().includes(query.toLowerCase())); if(matches){renderVocabulary();return;}
@@ -540,31 +784,27 @@
       $('#vocabularyList').innerHTML=`<article class="vocabulary-word dictionary-result"><div><span class="vocabulary-category">ONLINE DICTIONARY · ${safeText(entry.word||query)}</span>${meanings.map(meaning=>`<strong>${safeText(meaning.partOfSpeech||'Meaning')}</strong>${(meaning.definitions||[]).slice(0,3).map(def=>`<p>${safeText(def.definition||'')}${def.example?`<small class="dictionary-example">Example: ${safeText(def.example)}</small>`:''}</p>`).join('')}`).join('')}</div></article>`;
     } catch (_) { $('#vocabularyList').innerHTML='<p class="vocabulary-empty">No entry found or the online dictionary is unavailable. Try another spelling or search the starter list.</p>'; }
   }
-  $('#vocabularyCategory').addEventListener('change',renderVocabulary);
+  $$('.vocabulary-category-tabs [data-vocabulary-category]').forEach(button=>button.addEventListener('click',()=>{$('#vocabularyCategory').value=button.dataset.vocabularyCategory;$$('.vocabulary-category-tabs [data-vocabulary-category]').forEach(tab=>{const selected=tab===button;tab.classList.toggle('active',selected);tab.setAttribute('aria-selected',String(selected));});renderVocabulary();}));
   $('#vocabularyGoal').addEventListener('change',()=>{vocabularyProgress.goal=Number($('#vocabularyGoal').value);localStorage.setItem(vocabularyKey,JSON.stringify(vocabularyProgress));renderVocabulary();});
   $('#vocabularySearch').addEventListener('input',renderVocabulary);
   $('#vocabularySearch').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();lookupVocabulary();}});
   $('#vocabularyLookup').addEventListener('click',lookupVocabulary);
-  renderVocabulary();
-  const writingDraftKey=`northstar-writing-studio:${language}`;
-  $('#writingStudioInput').value=localStorage.getItem(writingDraftKey)||'';
-  $('#writingStudioInput').addEventListener('input',()=>{try{localStorage.setItem(writingDraftKey,$('#writingStudioInput').value)}catch(_){}});
-  $('#writingPromptSelect').addEventListener('change',()=>{const prompts={routine:'Describe your daily routine.',person:'Describe someone you admire and explain why.',travel:'Write about a place you want to visit.',work:'Explain a goal you have at work or school.',opinion:'Share an opinion and give one reason.'};$('#writingStudioFeedback').hidden=true;$('#writingStudioInput').setAttribute('aria-label',prompts[$('#writingPromptSelect').value]);});
-  $('#reviewWriting').addEventListener('click',()=>{
-    if(languageCode!=='en'){showToast('Writing review checks are currently available for English only.');return;}
-    const text=$('#writingStudioInput').value.trim(), sentences=text.split(/[.!?]+/).map(item=>item.trim()).filter(Boolean), words=text.match(/[\p{L}'’-]+/gu)||[], notes=[];
-    if(!text){$('#writingStudioFeedback').innerHTML='<strong>Write a few sentences first.</strong><p>Choose a prompt above and start with your own words.</p>';$('#writingStudioFeedback').hidden=false;return;}
-    if(/^[a-z]/.test(text))notes.push('Start your first sentence with a capital letter.');
-    if(!/[.!?]["')\]]?\s*$/.test(text))notes.push('Add a full stop, question mark or exclamation mark at the end.');
-    if(sentences.length<Number($('#writingSentenceGoal').value))notes.push(`You wrote ${sentences.length} sentence${sentences.length===1?'':'s'}; your goal is ${$('#writingSentenceGoal').value}. Add another detail or example.`);
-    if(/\bi am agree\b/i.test(text))notes.push('Try “I agree” (without “am”).');
-    if(/\bshe go\b/i.test(text))notes.push('For she/he/it in the present simple, write “she goes”.');
-    if(/\byesterday\b/i.test(text)&&/\bi go\b/i.test(text))notes.push('For a finished event, use “I went” instead of “I go”.');
-    if(!notes.length)notes.push('Good draft structure. Read it aloud once and check that each sentence supports your prompt.');
-    const promptText=$('#writingPromptSelect').selectedOptions[0].textContent;
-    $('#writingStudioFeedback').innerHTML=`<strong>Writing review · ${safeText(promptText)}</strong><p>${words.length} words · ${sentences.length} sentence${sentences.length===1?'':'s'}</p><ul>${notes.map(note=>`<li>${safeText(note)}</li>`).join('')}</ul><small>These are simple English checks, not a full grammar or fluency assessment.</small>`;
-    $('#writingStudioFeedback').hidden=false;
+  $('#vocabularyList').addEventListener('click',event=>{
+    const learned=event.target.closest('[data-vocabulary-learn]'); if(learned){toggleVocabularyLearned(learned.dataset.vocabularyLearn);if(learned.closest('.vocab-word-detail'))renderVocabularyWord(learned.dataset.vocabularyLearn);else renderVocabulary();return;}
+    const speaker=event.target.closest('[data-pronounce]'); if(speaker){pronounceWord(speaker.dataset.pronounce);return;}
+    const open=event.target.closest('[data-word-open]'); if(open)renderVocabularyWord(open.dataset.wordOpen);
   });
+  renderVocabulary();
+  function openVocabulary() {
+    const body=$('#vocabularyModalBody');
+    installReaderContent(body, 'Vocabulary', 'Learn useful words for everyday life, study, travel and work. Hindi meanings sit beside each word.');
+    const card=$('#vocabularyCard'); card.hidden=false; body.append(card);
+    $('#vocabularyBack').hidden=true; renderVocabulary();
+    openReadingModal('vocabularyModal', 'vocabulary');
+    installReaderContent(body, 'Vocabulary', 'Learn useful words for everyday life, study, travel and work.');
+    $('#vocabularySearch').focus({preventScroll:true});
+  }
+  $('#openVocabularyCard').addEventListener('click', openVocabulary);
   const date = new Intl.DateTimeFormat('en',{weekday:'short',month:'short',day:'numeric'}).format(new Date());
   $('#todayLabel').textContent = date;
   $('#levelSelect').value = level;
@@ -573,13 +813,16 @@
   function renderLessons() {
     const course = getCourse(level);
     $('#roadmapTitle').textContent = `${level} · ${course.subtitle}`;
-    $('#languageScopeNote').textContent = language.toLowerCase() === 'english' ? 'English grammar and speaking topics are explained in Hindi and English, with a practice quiz and topic video search in each lesson. The roadmap follows beginner, intermediate and advanced stages; use the linked references for further detail.' : `${language} uses a basic starter roadmap only. Detailed grammar explanations, reviewed quizzes and topic video searches are currently provided for English. Writing drafts save only in this browser.`;
+    $('#languageScopeNote').textContent = language.toLowerCase() === 'english' ? 'English grammar and speaking topics are explained in Hindi and English, with a practice quiz and related video suggestions inside each lesson. The roadmap follows beginner, intermediate and advanced stages; use the linked references for further detail.' : `${language} follows the level you choose, with speaking and writing practice matched to each topic. Related video suggestions appear inside each lesson.`;
     const lessonIcons={SPEAKING:'chat',COMMUNICATION:'chat',SIMULATION:'chat',PRESENTATION:'video',PRONUNCIATION:'audio',VOCABULARY:'book',GRAMMAR:'book-open',FOUNDATION:'layers',LISTENING:'headphones',WRITING:'pencil',READING:'book-open',FLUENCY:'chat'};
+    const vocabularyLauncher = $('#openVocabularyCard');
+    vocabularyLauncher?.remove();
     $('#lessonList').innerHTML = course.lessons.map((lesson,index) => {
       const done = completed.has(lesson.id);
       const icon=lessonIcons[lesson.type]||'book-open';
-      return `<button class="lesson-row ${done?'is-complete':''}" data-lesson="${lesson.id}"><span class="lesson-index"><svg aria-hidden="true"><use href="/static/icons.svg?v=northstar-icons-20261028-2#icon-${icon}"></use></svg><i>${String(index+1).padStart(2,'0')}</i></span><span class="lesson-details"><span class="lesson-type">${lesson.type}</span><strong>${lesson.title}</strong><small>${lesson.desc}</small></span><span class="lesson-duration">${lesson.time}</span><span class="lesson-open"><svg aria-hidden="true"><use href="/static/icons.svg#icon-arrow-right"></use></svg></span></button>`;
+      return `<button class="lesson-row ${lesson.type==='VOCABULARY'?'lesson-vocabulary':''} ${done?'is-complete':''}" data-lesson="${lesson.id}"><span class="lesson-index"><svg aria-hidden="true"><use href="/static/icons.svg?v=northstar-icons-20261028-2#icon-${icon}"></use></svg><i>Step ${index+1}</i></span><span class="lesson-details"><span class="lesson-type">${lesson.type}</span><strong>${lesson.title}</strong><small>${lesson.desc}</small></span><span class="lesson-duration">${lesson.time}</span><span class="lesson-open"><svg aria-hidden="true"><use href="/static/icons.svg#icon-arrow-right"></use></svg></span></button>`;
     }).join('');
+    if (vocabularyLauncher) $('#lessonList').append(vocabularyLauncher);
     $$('.lesson-row').forEach(row => row.addEventListener('click', () => openLesson(row.dataset.lesson)));
     $('#progressLevel').textContent = level;
     $('#progressGoal').textContent = goal;
@@ -610,79 +853,409 @@
   }
   refreshLanguage(); loadProgress();
 
-  function writingPracticeMarkup(key, prompt) {
-    let saved = '';
-    try { saved = localStorage.getItem(key) || ''; } catch (_) { /* storage may be disabled */ }
-    return `<div class="writing-practice-card"><label for="writingPractice">WRITE YOUR RESPONSE</label><p>${safeText(prompt)}</p><textarea id="writingPractice" rows="4" placeholder="Write your own response here…">${safeText(saved)}</textarea><small>Saved only in this browser on this device.</small></div>`;
+  const topicActivityLabels={
+    en:{speak:'Speaking practice',write:'Sentence writing',speakButton:'Start speaking',writeButton:'Check my sentences',writeLabel:'Write your response',saved:'Your draft is saved in this browser.'},
+    hi:{speak:'बोलने का अभ्यास',write:'वाक्य लेखन',speakButton:'बोलना शुरू करें',writeButton:'वाक्य जाँचें',writeLabel:'अपना जवाब लिखें',saved:'आपका जवाब इसी ब्राउज़र में सेव होता है।'},
+    es:{speak:'Práctica oral',write:'Escritura de oraciones',speakButton:'Empezar a hablar',writeButton:'Revisar mis oraciones',writeLabel:'Escribe tu respuesta',saved:'Tu borrador se guarda en este navegador.'},
+    fr:{speak:'Pratique orale',write:'Écriture de phrases',speakButton:'Commencer à parler',writeButton:'Vérifier mes phrases',writeLabel:'Écrivez votre réponse',saved:'Votre brouillon est enregistré dans ce navigateur.'},
+    de:{speak:'Sprechübung',write:'Sätze schreiben',speakButton:'Sprechen starten',writeButton:'Sätze prüfen',writeLabel:'Schreibe deine Antwort',saved:'Dein Entwurf wird in diesem Browser gespeichert.'},
+    it:{speak:'Esercizio di conversazione',write:'Scrittura di frasi',speakButton:'Inizia a parlare',writeButton:'Controlla le frasi',writeLabel:'Scrivi la tua risposta',saved:'La bozza è salvata in questo browser.'},
+    pt:{speak:'Prática de conversação',write:'Escrita de frases',speakButton:'Começar a falar',writeButton:'Revisar minhas frases',writeLabel:'Escreva sua resposta',saved:'Seu rascunho fica salvo neste navegador.'},
+    ja:{speak:'スピーキング練習',write:'文章を書く',speakButton:'話す練習を始める',writeButton:'文章を確認する',writeLabel:'答えを書いてください',saved:'下書きはこのブラウザーに保存されます。'},
+    zh:{speak:'口语练习',write:'句子写作',speakButton:'开始口语练习',writeButton:'检查句子',writeLabel:'写下你的回答',saved:'草稿保存在此浏览器中。'},
+    ar:{speak:'تدريب على التحدث',write:'كتابة الجمل',speakButton:'ابدأ التحدث',writeButton:'راجع جُملي',writeLabel:'اكتب إجابتك',saved:'يُحفظ المسودّة في هذا المتصفح.'},
+    ur:{speak:'بولنے کی مشق',write:'جملے لکھنے کی مشق',speakButton:'بولنا شروع کریں',writeButton:'میرے جملے دیکھیں',writeLabel:'اپنا جواب لکھیں',saved:'آپ کا مسودہ اسی براؤزر میں محفوظ ہے۔'}
+  };
+  function topicEndPracticeMarkup(title,practice,key,id) {
+    let saved='';try{saved=localStorage.getItem(key)||'';}catch(_){}
+    const goalNames={hi:'वाक्य',es:'Oraciones',fr:'Phrases',de:'Sätze',it:'Frasi',pt:'Frases',ja:'文',zh:'句子',ar:'جمل',ur:'جملے'};
+    const labels={...(topicActivityLabels[languageCode]||{speak:`Speaking practice · ${language}`,write:`Sentence writing · ${language}`,speakButton:'Start speaking',writeButton:'Check my sentences',writeLabel:'Write your response',saved:'Your draft is saved in this browser.'}),goal:goalNames[languageCode]||'Sentences'};
+    const speaking=practice||`Talk about ${title}.`;
+    const writing=`Write three short sentences about ${title}. Use one idea from this lesson.`;
+    return `<section class="lesson-section topic-end-practice" data-topic-activity="${safeText(id)}" data-topic-title="${safeText(title)}"><div class="topic-speaking-activity" id="speaking-practice"><span class="feature-tag">${safeText(language.toUpperCase())}</span><h3 data-activity-label="speak">${safeText(labels.speak)}</h3><p class="topic-speaking-prompt" data-practice-source="${safeText(speaking)}">${safeText(speaking)}</p><div class="topic-speaking-actions"><button type="button" class="primary-button" id="lessonSpeak" data-topic-record data-practice-prompt="${safeText(speaking)}">${safeText(labels.speakButton)} <span>●</span></button><button type="button" class="quiet-button" data-topic-hear>Hear prompt</button></div><div class="topic-speaking-result" data-speaking-result aria-live="polite" hidden><strong data-speaking-status></strong><p data-speaking-transcript></p></div></div><div class="topic-writing-activity" id="writing-practice"><span class="feature-tag">${safeText(language.toUpperCase())}</span><h3 data-activity-label="write">${safeText(labels.write)}</h3><label class="topic-sentence-goal" for="topicSentenceGoal"><span data-activity-label="goal">${safeText(labels.goal||'Sentences')}</span><select id="topicSentenceGoal"><option value="3">3</option><option value="5">5</option><option value="8">8</option></select></label><p class="topic-writing-prompt" data-writing-source="${safeText(writing)}">${safeText(writing)}</p><label for="writingPractice" data-activity-label="writeLabel">${safeText(labels.writeLabel)}</label><textarea id="writingPractice" rows="4" lang="${safeText(languageCode||'en')}" placeholder="Write in ${safeText(language)}…">${safeText(saved)}</textarea><div class="topic-writing-actions"><small data-activity-label="saved">${safeText(labels.saved)}</small><button type="button" class="quiet-button" data-topic-writing-check>${safeText(labels.writeButton)}</button></div><p class="topic-writing-feedback" data-topic-writing-feedback aria-live="polite" hidden></p></div></section>`;
+  }
+  function bindTopicEndPractice(key,activityId) {
+    const section=$('[data-topic-activity]',$('#lessonBody')),field=$('#writingPractice');if(!section||!field)return;
+    field.addEventListener('input',()=>{try{localStorage.setItem(key,field.value)}catch(_){}});
+    $('#topicSentenceGoal').addEventListener('change',()=>{const source=`Write ${$('#topicSentenceGoal').value} short sentences about ${section.dataset.topicTitle}. Use one idea from this lesson.`;const prompt=$('[data-writing-source]',section);prompt.dataset.writingSource=source;prompt.textContent=source;if(languageCode&&languageCode!=='en')localizeTopicEndPractice(section,activityId);});
+    $('[data-topic-writing-check]',section).addEventListener('click',async()=>{
+      const text=field.value.trim(),feedback=$('[data-topic-writing-feedback]',section),sentences=text.split(/[.!?。！？।]+/).map(value=>value.trim()).filter(Boolean),goal=Number($('#topicSentenceGoal').value||3);
+      if(!text){let empty=languageCode==='en'?'Write a few sentences about this lesson first.':'Write a few sentences about this lesson first.';if(languageCode!=='en')empty=await translateActivityText(empty,languageCode);feedback.textContent=empty;feedback.hidden=false;return;}
+      let message=`You wrote ${sentences.length} of ${goal} sentences. Read your answer aloud and check that it matches the topic.`;
+      if(sentences.length<goal)message+=` Add ${goal-sentences.length} more sentence${goal-sentences.length===1?'':'s'}.`;
+      if(languageCode==='en'&&!/[.!?]["')\]]?\s*$/.test(text))message+=' Add a full stop or question mark at the end.';
+      else if(languageCode!=='en')message=await translateActivityText(message,languageCode)||message;
+      if(!section.isConnected||section.dataset.topicActivity!==activityId)return;
+      feedback.textContent=message;feedback.hidden=false;
+    });
+    const speak=$('#lessonSpeak'),record=$('[data-topic-record]',section),result=$('[data-speaking-result]',section),recordButton=record;
+    $('[data-topic-hear]',section).addEventListener('click',()=>speakTranslation(speak.dataset.practicePrompt||$('[data-practice-source]',section).textContent,languageCode||'en'));
+    recordButton.addEventListener('click',()=>openPractice(speak.dataset.practicePrompt||$('[data-practice-source]',section).textContent));
+    if(languageCode&&languageCode!=='en')localizeTopicEndPractice(section,activityId);
+  }
+  async function translateWithGoogle(text,from,to){
+    const params=new URLSearchParams({client:'gtx',sl:from,tl:to,dt:'t',q:text});
+    const response=await fetch(`https://translate.googleapis.com/translate_a/single?${params}`,{headers:{Accept:'application/json'}});
+    if(!response.ok)throw new Error('Translation service unavailable');
+    const data=await response.json();
+    const translated=(Array.isArray(data?.[0])?data[0]:[]).filter(part=>Array.isArray(part)&&typeof part[0]==='string').map(part=>part[0]).join('').trim();
+    if(!translated)throw new Error('No translation returned');
+    return translated;
+  }
+  async function translateActivityText(text,code){
+    if(!text||!code||code==='en')return text;
+    try{return await translateWithGoogle(text,'en',code);}catch(_){return text;}
+  }
+  async function localizeTopicEndPractice(section,activityId){
+    const speakSource=$('[data-practice-source]',section).dataset.practiceSource,writeSource=$('[data-writing-source]',section).dataset.writingSource,code=languageCode;
+    const [speaking,writing]=await Promise.all([translateActivityText(speakSource,code),translateActivityText(writeSource,code)]);
+    if(!section.isConnected||section.dataset.topicActivity!==activityId||code!==languageCode)return;
+    $('[data-practice-source]',section).textContent=speaking;$('#lessonSpeak').dataset.practicePrompt=speaking;$('[data-writing-source]',section).textContent=writing;
+    if(!topicActivityLabels[code]){
+      const items=[['speak','Speaking practice'],['write','Sentence writing'],['speakButton','Start speaking'],['writeLabel','Write your response'],['saved','Your draft is saved in this browser.'],['writeButton','Check my sentences'],['goal','Sentences']];
+      const translated=await Promise.all(items.map(([,source])=>translateActivityText(source,code)));
+      if(!section.isConnected||section.dataset.topicActivity!==activityId||code!==languageCode)return;
+      items.forEach(([key],index)=>{const node=$(`[data-activity-label="${key}"]`,section);if(node)node.textContent=translated[index];else if(key==='speakButton')$('#lessonSpeak').textContent=translated[index];else if(key==='writeButton')$('[data-topic-writing-check]',section).textContent=translated[index];});
+      $('#lessonSpeak').textContent=translated[2];$('[data-topic-writing-check]',section).textContent=translated[5];
+    }
   }
 
-  function bindWritingPractice(key) {
-    const field = $('#writingPractice');
-    if (!field) return;
-    field.addEventListener('input', () => { try { localStorage.setItem(key, field.value); } catch (_) { /* keep typing available if storage is disabled */ } });
+  function topicQuizItems(lesson) {
+    const noteText=(item)=>Array.isArray(item.notes)?item.notes.map(note=>typeof note==='string'?note:note?.en||'').join(' '):'';
+    const points=teachingSentences(noteText(lesson)).filter(point=>point.length>=28&&point.length<=210);
+    const keyPoints=(points.length?points:[lesson.desc,lesson.practice].filter(Boolean)).slice(0,3);
+    while(keyPoints.length<3)keyPoints.push(keyPoints[keyPoints.length-1]||lesson.desc||lesson.title);
+    const distractors=currentLessons().filter(item=>item.id!==lesson.id).flatMap(item=>teachingSentences(noteText(item)).filter(point=>point.length>=28&&point.length<=210));
+    const seed=[...lesson.id].reduce((sum,char)=>sum+char.charCodeAt(0),0);
+    return keyPoints.map((point,index)=>{
+      const choices=[point];
+      for(let offset=0;choices.length<4&&offset<distractors.length;offset++){
+        const candidate=distractors[(seed+index*11+offset*7)%distractors.length];
+        if(candidate&&!choices.includes(candidate))choices.push(candidate);
+      }
+      while(choices.length<4)choices.push(`This point is not part of ${lesson.title}.`);
+      const answer=(seed+index)%choices.length;
+      [choices[0],choices[answer]]=[choices[answer],choices[0]];
+      return {q:`Which idea is taught in “${lesson.title}”?`,options:choices,answer,why:'This point comes from the explanation for this topic.'};
+    });
   }
-
   function topicPracticeMarkup(lesson) {
-    const hash=[...lesson.id].reduce((sum,char)=>sum+char.charCodeAt(0),0);
-    const conversational=/SPEAKING|COMMUNICATION|FLUENCY|PRESENTATION|DISCUSSION|SIMULATION/.test(lesson.type);
-    const pool=conversational?placementConversation:placementQuiz;
-    const items=Array.from({length:5},(_,index)=>pool[(hash+index*3)%pool.length]);
-    return `<section class="topic-practice" data-topic-practice><div class="topic-practice-heading"><div><span class="feature-tag">PRACTISE THIS TOPIC</span><h3>Quick check · 5 questions</h3><p>Answer a short English practice set and review the reasoning for each answer.</p></div><button type="button" class="primary-button" data-topic-start>Start practice →</button></div><div class="topic-practice-session" data-topic-session hidden data-items="${safeText(JSON.stringify(items))}"><p data-topic-count></p><strong data-topic-stem></strong><div class="topic-practice-options" data-topic-options></div><div class="topic-practice-feedback" data-topic-feedback hidden></div><button type="button" class="quiet-button" data-topic-next disabled>Check answer</button></div></section>`;
+    const items=topicQuizItems(lesson);
+    return `<section class="topic-practice lesson-section" id="interactive-practice" data-topic-practice><div class="topic-practice-heading"><div><span class="feature-tag">PRACTISE THIS TOPIC</span><h3>Topic quiz · 3 questions</h3><p>Check the key ideas from this lesson. Each answer includes a short explanation.</p></div><button type="button" class="primary-button" data-topic-start>Start quiz →</button></div><div class="topic-practice-session" data-topic-session hidden data-items="${safeText(JSON.stringify(items))}"><p data-topic-count></p><strong data-topic-stem></strong><div class="topic-practice-options" data-topic-options></div><div class="topic-practice-feedback" data-topic-feedback hidden></div><button type="button" class="quiet-button" data-topic-next disabled>Next question</button></div></section>`;
   }
   function bindTopicPractice() {
     const root=$('[data-topic-practice]'); if(!root)return;
     const session=$('[data-topic-session]',root), items=JSON.parse(session.dataset.items);let index=0,chosen=null,score=0,reviewed=false;
     $('[data-topic-start]',root).addEventListener('click',()=>{
-      if(languageCode!=='en'){showToast('Topic quizzes currently have reviewed English questions only.');return;}
       session.hidden=false;index=0;chosen=null;score=0;reviewed=false;$('[data-topic-next]',session).hidden=false;showTopicQuestion();
     });
-    function showTopicQuestion(){
-      const item=items[index];reviewed=false;$('[data-topic-count]',session).textContent=`Question ${index+1} of ${items.length}`;$('[data-topic-stem]',session).textContent=item.q;
+    async function showTopicQuestion(){
+      const questionIndex=index,item=items[questionIndex];reviewed=false;$('[data-topic-count]',session).textContent=`Question ${questionIndex+1} of ${items.length}`;
       $('[data-topic-feedback]',session).hidden=true;$('[data-topic-next]',session).disabled=true;$('[data-topic-next]',session).textContent='Check answer';chosen=null;
-      $('[data-topic-options]',session).innerHTML=item.options.map((option,i)=>`<button type="button" class="placement-option" data-topic-option="${i}"><span>${String.fromCharCode(65+i)}</span>${safeText(option)}</button>`).join('');
-      $$('[data-topic-option]',session).forEach(button=>button.addEventListener('click',()=>{chosen=Number(button.dataset.topicOption);$$('[data-topic-option]',session).forEach(node=>node.classList.toggle('selected',node===button));$('[data-topic-next]',session).disabled=false;}));
+      $('[data-topic-stem]',session).textContent='Preparing your topic question…';
+      const [question,...options]=await Promise.all([item.q,...item.options].map(text=>languageCode&&languageCode!=='en'?translateActivityText(text,languageCode):text));
+      if(!session.isConnected||questionIndex!==index)return;
+      $('[data-topic-stem]',session).textContent=question;
+      $('[data-topic-options]',session).innerHTML=options.map((option,i)=>`<button type="button" class="placement-option" data-topic-option="${i}"><span>${String.fromCharCode(65+i)}</span>${safeText(option)}</button>`).join('');
+      $$('[data-topic-option]',session).forEach(button=>button.addEventListener('click',async()=>{if(reviewed)return;reviewed=true;chosen=Number(button.dataset.topicOption);const correct=chosen===item.answer;if(correct)score++;$$('[data-topic-option]',session).forEach((node,i)=>{node.classList.toggle('selected',node===button);node.classList.toggle('is-correct',i===item.answer);node.classList.toggle('is-wrong',node===button&&!correct);node.disabled=true;});const message=languageCode&&languageCode!=='en'?await translateActivityText(item.why,languageCode):item.why;if(!session.isConnected||questionIndex!==index)return;$('[data-topic-feedback]',session).innerHTML=`<strong>${correct?'Correct!':'Not quite.'}</strong> ${safeText(message)}`;$('[data-topic-feedback]',session).hidden=false;$('[data-topic-next]',session).textContent=index===items.length-1?'Finish practice':'Next question';$('[data-topic-next]',session).disabled=false;}));
     }
     $('[data-topic-next]',session).addEventListener('click',()=>{
       if(!reviewed){if(chosen===null)return;const item=items[index],correct=chosen===item.answer;if(correct)score++;
         $('[data-topic-feedback]',session).innerHTML=`<strong>${correct?'Correct.':'Not quite.'} ${correct?'':'Correct answer: '+safeText(item.options[item.answer])+'. '}</strong>${safeText(item.why)}`;$('[data-topic-feedback]',session).hidden=false;reviewed=true;
         $('[data-topic-next]',session).textContent=index===items.length-1?'See results':'Next question';$('[data-topic-next]',session).disabled=false;return;}
-      if(index===items.length-1){$('[data-topic-stem]',session).textContent=`Practice complete · ${score} of ${items.length} correct.`;$('[data-topic-options]',session).innerHTML='';$('[data-topic-feedback]',session).innerHTML='Review the explanations above and revisit the lesson notes where useful.';$('[data-topic-next]',session).hidden=true;return;}
+      if(index===items.length-1){$('[data-topic-stem]',session).textContent=`Practice complete · ${score} of ${items.length} correct.`;$('[data-topic-options]',session).innerHTML='';$('[data-topic-feedback]',session).textContent='Review the explanations above and revisit the lesson notes where useful.';$('[data-topic-next]',session).hidden=true;return;}
       index++;showTopicQuestion();
     });
   }
 
-  function openLesson(id) {
-    const lesson = currentLessons().find(item=>item.id===id);
-    if (!lesson) return;
-    activeLesson = lesson; activeSkill = null; $('#completeLesson').innerHTML='Mark lesson complete <span>✓</span>';
-    $('#lessonKicker').textContent = `${level.toUpperCase()} · ${lesson.type} · ${lesson.time.toUpperCase()}`;
-    $('#lessonTitle').textContent = lesson.title;
-    $('#lessonSummary').textContent = lesson.desc;
-    const writingKey = `northstar-writing:${language}:${level}:${lesson.id}`;
-    const explanations = lesson.notes.map(note => typeof note === 'string'
-      ? `<li>${safeText(note)}</li>`
-      : `<li class="grammar-explanation"><div><strong>English</strong><p>${safeText(note.en)}</p></div><div lang="hi"><strong>हिन्दी</strong><p>${safeText(note.hi)}</p></div></li>`).join('');
-    const isEnglishGrammar = lesson.id.startsWith('g-');
-    const referenceLinks = isEnglishGrammar ? '<div class="grammar-reference-links"><a href="https://learnenglish.britishcouncil.org/free-resources/grammar/english-grammar-reference" target="_blank" rel="noopener noreferrer">British Council grammar reference ↗</a><a href="https://dictionary.cambridge.org/grammar/british-grammar" target="_blank" rel="noopener noreferrer">Cambridge Grammar ↗</a></div>' : '';
-    const videoQuery = encodeURIComponent(`${lesson.title} English grammar ${level} Hindi explanation`);
-    const videoUrl = `https://www.youtube.com/results?search_query=${videoQuery}`;
-    const videoResource = isEnglishGrammar ? `<div class="lesson-video-resource"><span>KEEP LEARNING</span><a href="${videoUrl}" target="_blank" rel="noopener noreferrer">Find an English video for “${safeText(lesson.title)}” ↗</a><small>Opens a topic-specific YouTube search so you can choose a video at your level.</small></div>` : '';
-    const topicPractice = languageCode === 'en' ? topicPracticeMarkup(lesson) : '';
-    $('#lessonBody').innerHTML = `<div class="lesson-note-card grammar-notes"><strong>${isEnglishGrammar?'GRAMMAR EXPLANATION · ENGLISH + हिन्दी':'QUICK NOTES'}</strong><ul>${explanations}</ul>${referenceLinks}</div><div class="lesson-practice-card"><span>TRY IT OUT</span><p>${safeText(lesson.practice)}</p><button class="inline-practice" id="lessonSpeak">Practise this aloud <span><svg aria-hidden="true"><use href="/static/icons.svg?v=northstar-icons-20261028-2#icon-mic"></use></svg></span></button></div>${topicPractice}${writingPracticeMarkup(writingKey, `Write your answer in ${language}.`)}${videoResource}`;
-    bindWritingPractice(writingKey);
-    bindTopicPractice();
-    $('#lessonModal').hidden = false; document.body.classList.add('modal-open');
-    $('#lessonSpeak').addEventListener('click', () => { closeModal('lessonModal'); $('#practiceGoal').dataset.customPrompt=lesson.practice; openPractice(lesson.practice); });
+  function teachingSentences(value) { return String(value||'').match(/[^.!?।]+[.!?।]?/g)?.map(part=>part.trim()).filter(Boolean)||[]; }
+  function lessonLanguageCard(en,hi) { return `<div class="lesson-language-pair"><article class="lesson-language-card lang-en" data-language="en"><strong>English</strong><p>${safeText(en||'')}</p></article><article class="lesson-language-card lang-hi" data-language="hi" lang="hi"><strong>हिन्दी</strong><p>${safeText(hi||'')}</p></article></div>`; }
+  function extractLessonExamples(enText,hiText) {
+    const quotes=[...String(enText||'').matchAll(/[“"]([^”"]{5,})[”"]/g)].map(match=>match[1]).filter(text=>text.includes(' '));
+    const unique=[...new Set(quotes)].slice(0,3);
+    return unique.map(sentence=>{const index=String(hiText||'').indexOf(sentence);let hindi='';if(index>=0){const after=String(hiText).slice(index+sentence.length).replace(/^[”"]\s*/,'');hindi=after.match(/^\(([^)]+)\)/)?.[1]||'';}return {sentence,hindi};});
   }
-  function closeModal(id) { const modal=$(`#${id}`); if(modal) modal.hidden=true; if (!$$('.modal-backdrop:not([hidden])').length) document.body.classList.remove('modal-open'); }
-  $$('[data-close]').forEach(button=>button.addEventListener('click',()=>button.dataset.close==='practiceModal'?stopSession():closeModal(button.dataset.close)));
+  function grammarMistakes(id) {
+    const byLesson={
+      'g-basic-word-order':[['Maya novels reads.','Maya reads novels.'],['Is raining today.','It is raining today.'],['I every day English practise.','I practise English every day.']],
+      'g-basic-present-simple':[['She go to work.','She goes to work.'],['Does he likes tea?','Does he like tea?'],['I walks to school.','I walk to school.']],
+      'g-basic-articles':[['I saw dog.','I saw a dog.'],['Sun is bright.','The sun is bright.'],['She likes the music. (general)','She likes music.']],
+      'g-basic-past-simple':[['We did not went.','We did not go.'],['Did you saw it?','Did you see it?'],['She goed home.','She went home.']]
+    };
+    return byLesson[id]||[['She go to work.','She goes to work.'],['I am agree.','I agree.'],['He doesn’t likes tea.','He doesn’t like tea.']];
+  }
+  function quickLessonPanels(lesson){
+    const detailed=`<section class="lesson-section lesson-detailed-heading" id="detailed-lesson"><h3>Detailed lesson</h3><p>Read the explanation, rules and examples below.</p></section>`;
+    return detailed;
+  }
+  function lessonPracticeCards(){return `<section class="lesson-section lesson-practice-shortcuts" id="topic-practice"><h3>Practise this topic</h3><p>Choose a quick activity. Each one uses the lesson you just studied.</p><div class="lesson-practice-card-grid"><button type="button" data-reader-jump="interactive-practice"><span class="practice-card-index">01</span><strong>Quiz practice</strong><small>Check what you remember</small><b>Start quiz →</b></button><button type="button" data-reader-jump="speaking-practice"><span class="practice-card-index">02</span><strong>Speaking practice</strong><small>Say your own examples aloud</small><b>Start speaking →</b></button><button type="button" data-reader-jump="writing-practice"><span class="practice-card-index">03</span><strong>Writing practice</strong><small>Write sentences using this topic</small><b>Start writing →</b></button></div></section>`;}
+  function renderDetailedChapter(lesson,chapter) {
+    const pair=(english,hindi)=>lessonLanguageCard(english,hindi);
+    const autoText=text=>`<div class="chapter-language-pair"><p data-language="en">${safeText(text)}</p><p class="chapter-auto-translation" data-language="translated" data-source-text="${safeText(text)}" hidden></p></div>`;
+    const objectiveCards=chapter.objectives.map((item,index)=>`<article class="chapter-objective"><span>${String(index+1).padStart(2,'0')}</span>${pair(item,chapter.objectivesHindi[index]||'इस लक्ष्य को इस पाठ के उदाहरणों के साथ समझें।')}</article>`).join('');
+    const concepts=chapter.concepts.map((concept,index)=>`<article class="chapter-concept"><div class="chapter-concept-head"><span>CONCEPT ${String(index+1).padStart(2,'0')}</span><h4>${safeText(concept.title)}</h4></div>${pair(concept.definition,concept.hi)}<div class="chapter-identify"><strong>How to identify it</strong>${autoText(concept.identify)}</div><div class="chapter-concept-examples"><strong>Examples</strong>${concept.examples.map(([en,hi,why])=>`<article>${pair(en,hi)}${autoText(why)}</article>`).join('')}</div><details class="chapter-knowledge-check"><summary>Quick knowledge check</summary>${autoText(`In one sentence, explain ${concept.title.split(' · ')[0]}.`)}${autoText(concept.definition)}</details></article>`).join('');
+    const rules=chapter.rules.map(([title,formula,en,hi,why,exception],index)=>`<article class="chapter-rule"><span class="chapter-rule-number">${String(index+1).padStart(2,'0')}</span><div><h4>${safeText(title)}</h4><p class="chapter-formula">${safeText(formula)}</p>${pair(en,hi)}${autoText(`Why it matters: ${why}`)}${autoText(`Remember: ${exception}`)}</div></article>`).join('');
+    const patterns=chapter.patterns.map(([formula,explanation,examples])=>`<article class="chapter-pattern"><span class="chapter-formula">${safeText(formula)}</span>${autoText(explanation)}<div class="chapter-pattern-examples">${examples.map(([sentence,hindi])=>pair(sentence,hindi)).join('')}</div><details><summary>Try this pattern</summary>${autoText(`Write one new sentence using ${formula}.`)}</details></article>`).join('');
+    const categories=['Basic','Intermediate','Daily life','Speaking','Writing'];
+    const examples=chapter.examples.map((item,index)=>`<article class="chapter-example"><span class="chapter-example-tag">${categories[Math.min(4,Math.floor(index/4))]} · ${String(index+1).padStart(2,'0')}</span><div class="chapter-sentence-parts"><span><small>SUBJECT</small><b>${safeText(item.s)}</b></span><span><small>VERB</small><b>${safeText(item.v)}</b></span><span><small>OBJECT / DETAIL</small><b>${safeText(item.r||'—')}</b></span></div>${pair(`${item.s} ${item.v}${item.r?' '+item.r:''}`,item.hi)}${autoText(item.why)}</article>`).join('');
+    const mistakes=chapter.mistakes.map(([wrong,right,why],index)=>`<article class="chapter-mistake"><span>MISTAKE ${String(index+1).padStart(2,'0')}</span><div class="wrong-sentence">${autoText(`Incorrect: ${wrong}`)}</div><div class="right-sentence">${autoText(`Correct: ${right}`)}</div>${autoText(why)}</article>`).join('');
+    const scenarios=chapter.scenarios.map(([title,task,vocab,samples,hi],index)=>`<article class="chapter-scenario"><span>SCENARIO ${String(index+1).padStart(2,'0')}</span><h4>${safeText(title)}</h4>${pair(task,hi)}<div class="chapter-vocabulary">${vocab.map(word=>`<span>${safeText(word)}</span>`).join('')}</div><div class="chapter-sample-sentences">${samples.map(sample=>autoText(sample)).join('')}</div><details><summary>Your turn</summary>${autoText('Write or say three sentences for this situation. Use a clear subject and verb in each sentence.')}</details></article>`).join('');
+    const quiz=(items,label)=>`<section class="lesson-section chapter-quiz" id="${label==='assessment'?'final-assessment':'interactive-practice'}" data-chapter-quiz="${label}" data-items="${safeText(JSON.stringify(items))}"><div class="chapter-quiz-heading"><span class="chapter-kicker">${label==='assessment'?'FINAL ASSESSMENT':'PRACTICE · 20 QUESTIONS'}</span><h3>${label==='assessment'?'Check what you have learned':'Practise the sentence patterns'}</h3><p>${label==='assessment'?'Answer 10 mixed questions. Review each explanation before you finish.':'Questions use multiple choice, fill-in, sentence order, error correction and matching-style choices.'}</p><button class="primary-button" type="button" data-chapter-start>${label==='assessment'?'Start assessment':'Start practice'} →</button></div><div class="chapter-quiz-session" data-chapter-session hidden><p data-chapter-count></p><strong data-chapter-question></strong><div class="chapter-quiz-options" data-chapter-options></div><div class="chapter-quiz-feedback" data-chapter-feedback hidden></div><div class="chapter-quiz-actions"><span data-chapter-score></span><button class="primary-button" type="button" data-chapter-next disabled>Check answer</button></div></div></section>`;
+    const intro=`<section class="lesson-section chapter-introduction" id="introduction"><h3>Introduction</h3><h4>Let’s understand sentence structure</h4>${pair(chapter.intro.en,chapter.intro.hi)}<div class="chapter-callout"><strong>Why word order matters</strong><p>Listeners use word order to understand who acts and what happens. Changing the order can change the meaning or make a sentence hard to follow.</p></div></section>`;
+    const objectiveSection=`<section class="lesson-section" id="learning-objectives"><h3>What you’ll learn</h3><p class="chapter-section-lead">By the end of this lesson, you will be able to:</p><div class="chapter-objectives">${objectiveCards}</div></section>`;
+    const practiceShortcuts='';
+    const detailedHeading=`<section class="lesson-section lesson-detailed-heading" id="detailed-lesson"><h3>Detailed lesson</h3><p>Work through the concepts, rules and examples below at your own pace.</p></section>`;
+    const conceptsSection=`<section class="lesson-section" id="basic-concepts"><h3>Understand the basic concepts</h3><p class="chapter-section-lead">Learn the job each part does, then use the question prompts to check your understanding.</p><div class="chapter-concepts">${concepts}</div></section>`;
+    const visual=`<section class="lesson-section" id="visual-explanation"><h3>See the sentence structure</h3><div class="chapter-diagram"><p>Maya reads novels.</p><div><span><small>SUBJECT</small><b>Maya</b><em>Who?</em></span><i>+</i><span><small>VERB</small><b>reads</b><em>What happens?</em></span><i>+</i><span><small>OBJECT</small><b>novels</b><em>Reads what?</em></span></div><p lang="hi">माया उपन्यास पढ़ती है। · माया = कौन? · पढ़ती है = क्या करती है? · उपन्यास = क्या पढ़ती है?</p></div><div class="chapter-patterns">${chapter.patterns.map(([formula,explanation])=>`<article><b>${safeText(formula)}</b><p>${safeText(explanation)}</p></article>`).join('')}</div><p class="chapter-section-lead">A sentence can be complete without an object: “Birds sing.”</p></section>`;
+    const ruleSection=`<section class="lesson-section" id="grammar-rules"><h3>Important sentence structure rules</h3><div class="chapter-rules">${rules}</div></section>`;
+    const patternSection=`<section class="lesson-section" id="sentence-patterns"><h3>Sentence patterns</h3><div class="chapter-pattern-list">${patterns}</div></section>`;
+    const exampleSection=`<section class="lesson-section" id="detailed-examples"><h3>Detailed examples</h3><p class="chapter-section-lead">The subject, verb and rest of the sentence are labelled so you can see each part at a glance.</p><div class="chapter-example-grid">${examples}</div></section>`;
+    const mistakeSection=`<section class="lesson-section" id="common-mistakes"><h3>Common mistakes</h3><div class="chapter-mistake-grid">${mistakes}</div></section>`;
+    const realLife=`<section class="lesson-section" id="real-life-applications"><h3>Use it in real life</h3><div class="chapter-scenario-grid">${scenarios}</div></section>`;
+    const speaking=`<section class="lesson-section chapter-speaking" id="speaking-practice" data-chapter-speaking><h3>Speaking practice</h3><p class="chapter-section-lead">Choose one prompt, listen to it, then speak for 30–60 seconds using complete sentences.</p><label>Choose an activity<select data-speaking-choice>${chapter.scenarios.slice(0,3).map(([title,task])=>`<option value="${safeText(`${title}: ${task}`)}">${safeText(title)}</option>`).join('')}</select></label><div class="chapter-speaking-prompt" data-speaking-prompt>${safeText(`${chapter.scenarios[0][0]}: ${chapter.scenarios[0][1]}`)}</div><div class="chapter-speaking-controls"><button class="primary-button" type="button" data-chapter-record>● Start speaking</button><button class="quiet-button" type="button" data-chapter-hear>Hear prompt</button></div><div class="chapter-transcript" data-chapter-transcript aria-live="polite">Your speech transcript will appear here.</div><p class="chapter-feedback-note">Speech recognition provides a transcript when your browser supports it. It does not score pronunciation or grammar.</p></section>`;
+    const writeKey=`northstar-writing:${language}:${level}:${lesson.id}`;let draft='';try{draft=localStorage.getItem(writeKey)||'';}catch(_){}
+    const writing=`<section class="lesson-section chapter-writing" id="writing-practice" data-chapter-writing data-writing-key="${safeText(writeKey)}"><h3>Writing practice</h3><p class="chapter-section-lead">Write 3–5 sentences introducing yourself and describing one daily activity. Use a subject and verb in every sentence.</p><details class="chapter-model-answer"><summary>Read a sample answer</summary><p>My name is Asha. I work in a bookshop. I help customers every day. I enjoy my work because I meet many people.</p><p lang="hi">मेरा नाम आशा है। मैं किताबों की दुकान में काम करती हूँ। मैं हर दिन ग्राहकों की मदद करती हूँ। मुझे अपना काम पसंद है क्योंकि मैं कई लोगों से मिलती हूँ।</p></details><div class="chapter-vocabulary"><span>work</span><span>study</span><span>enjoy</span><span>help</span><span>every day</span><span>because</span></div><label for="chapterWritingEditor">Your response</label><textarea id="chapterWritingEditor" data-writing-editor rows="8" placeholder="Write 3–5 complete sentences…">${safeText(draft)}</textarea><div class="chapter-writing-meta"><span data-writing-count>0 words · 0 sentences</span><button class="primary-button" type="button" data-writing-check>Check my writing</button></div><div class="chapter-writing-feedback" data-writing-feedback hidden></div></section>`;
+    const revision=`<section class="lesson-section" id="quick-revision"><h3>Quick revision</h3><div class="chapter-revision-grid">${chapter.revision.map((point,index)=>`<article><span>${String(index+1).padStart(2,'0')}</span>${autoText(point)}</article>`).join('')}</div><div class="chapter-recap"><h4>Five quick recall questions</h4>${chapter.recap.map(([question,answer],index)=>`<details><summary>${String(index+1)}. ${safeText(question)}</summary>${autoText(answer)}</details>`).join('')}</div></section>`;
+    const completion=`<section class="lesson-section chapter-completion" id="lesson-completion"><span class="chapter-kicker">LESSON PROGRESS</span><h3>Your learning summary</h3><div class="chapter-completion-grid"><article><span>Time in this lesson</span><strong data-lesson-time>0 min</strong></article><article><span>Practice score</span><strong data-practice-result>Not started</strong></article><article><span>Assessment score</span><strong data-assessment-result>Not started</strong></article></div><p>Finish the practice and assessment, then mark the lesson complete using the button below.</p></section>`;
+    return `${lessonLanguageTabsMarkup()}${practiceShortcuts}${detailedHeading}${objectiveSection}${intro}${conceptsSection}${visual}${ruleSection}${patternSection}${exampleSection}${mistakeSection}${realLife}${quiz(chapter.quiz,'practice')}${speaking}${writing}${revision}${quiz(chapter.assessment,'assessment')}${completion}${lessonPracticeCards()}`;
+  }
+  function bindChapterActivities(chapter,lesson) {
+    const body=$('#lessonBody'),started=Date.now(),draftKey=`northstar-chapter-writing:${language}:${lesson.id}`;
+    const timeNode=$('[data-lesson-time]',body);let timer=setInterval(()=>{if(!timeNode?.isConnected||$('#lessonModal').hidden){clearInterval(timer);return;}timeNode.textContent=`${Math.max(1,Math.floor((Date.now()-started)/60000))} min`;},15000);
+    $$('[data-chapter-quiz]',body).forEach(root=>{
+      const kind=root.dataset.chapterQuiz,items=JSON.parse(root.dataset.items),session=$('[data-chapter-session]',root);
+      let index=0,score=0,selected=null,reviewed=false,answers=[];
+      const start=$('[data-chapter-start]',root),next=$('[data-chapter-next]',session);
+      const showQuestion=async()=>{
+        const questionIndex=index,item=items[questionIndex];selected=null;reviewed=false;
+        $('[data-chapter-count]',session).textContent=`Question ${questionIndex+1} of ${items.length} · ${item.type||'Mixed review'}`;
+        $('[data-chapter-question]',session).textContent='Preparing question…';$('[data-chapter-feedback]',session).hidden=true;next.disabled=true;next.textContent='Check answer';
+        const translated=await Promise.all([item.q,...item.options].map(text=>languageCode&&languageCode!=='en'?translateActivityText(text,languageCode):text));
+        if(!session.isConnected||index!==questionIndex)return;
+        $('[data-chapter-question]',session).textContent=translated[0];
+        $('[data-chapter-options]',session).innerHTML=translated.slice(1).map((option,optionIndex)=>`<button type="button" data-chapter-option="${optionIndex}"><span>${String.fromCharCode(65+optionIndex)}</span>${safeText(option)}</button>`).join('');
+        $$('[data-chapter-option]',session).forEach(button=>button.addEventListener('click',()=>{
+          if(reviewed)return;selected=Number(button.dataset.chapterOption);reviewed=true;
+          const correct=selected===item.answer;if(correct)score++;
+          $('[data-chapter-score]',session).textContent=`Score: ${score} / ${items.length}`;
+          $$('[data-chapter-option]',session).forEach((option,optionIndex)=>{option.disabled=true;option.setAttribute('aria-pressed',String(option===button));option.classList.toggle('is-correct',optionIndex===item.answer);option.classList.toggle('is-wrong',option===button&&!correct);});
+          answers.push({question:item.q,correctAnswer:item.options[item.answer],selected:item.options[selected],correct,why:item.why});
+          (async()=>{const explanation=languageCode&&languageCode!=='en'?await translateActivityText(item.why,languageCode):item.why;const prefix=correct?'Correct!':'Not quite.';const translatedPrefix=languageCode&&languageCode!=='en'?await translateActivityText(prefix,languageCode):prefix;if(!session.isConnected||index!==questionIndex)return;$('[data-chapter-feedback]',session).innerHTML=`<strong>${safeText(translatedPrefix)}</strong> ${safeText(explanation)}${correct?'':`<br><b>Correct answer:</b> ${safeText(translated[1+item.answer])}`}`;$('[data-chapter-feedback]',session).hidden=false;next.disabled=false;next.textContent=questionIndex===items.length-1?(kind==='assessment'?'See results':'Finish practice'):'Next question';})();
+        }));
+      };
+      start.addEventListener('click',()=>{session.hidden=false;start.hidden=true;next.hidden=false;index=0;score=0;answers=[];showQuestion();});
+      next.addEventListener('click',()=>{
+        if(!reviewed||selected===null)return;
+        if(index<items.length-1){index++;showQuestion();return;}
+        const percent=Math.round(score/items.length*100),destination=kind==='assessment'?'[data-assessment-result]':'[data-practice-result]';
+        if(kind==='assessment'){activeLessonScore=percent;const missed=answers.filter(answer=>!answer.correct).map(answer=>answer.question);$('[data-chapter-feedback]',session).innerHTML=`<strong>${percent>=80?'Topic mastered':'More revision recommended'} · ${percent}%</strong><p>${missed.length?`Review these questions: ${missed.map(safeText).join(' · ')}`:'You answered every question correctly.'}</p><p>Use the revision cards above, then reopen the assessment to practise again.</p>`;$('[data-chapter-feedback]',session).hidden=false;}
+        $(destination,body).textContent=`${score} / ${items.length} · ${percent}%`;
+        $('[data-chapter-count]',session).textContent=`Completed · ${score} of ${items.length} correct`;
+        $('[data-chapter-question]',session).textContent=kind==='assessment'?(percent>=80?'Great work. You have a strong grasp of this topic.':'Review the topics below, then try again.'):'Practice complete. Read each explanation and revisit any missed idea.';
+        $('[data-chapter-options]',session).innerHTML=answers.map((answer,answerIndex)=>`<article class="chapter-answer-review"><strong>${answer.correct?'✓':'↻'} ${answerIndex+1}. ${safeText(answer.question)}</strong><p>Your answer: ${safeText(answer.selected)}</p>${answer.correct?'':`<p>Correct answer: ${safeText(answer.correctAnswer)}</p>`}<p>${safeText(answer.why)}</p></article>`).join('');
+        $('[data-chapter-feedback]',session).hidden=kind!=='assessment';next.hidden=true;start.hidden=false;start.textContent='Try again →';
+      });
+    });
+    const editor=$('[data-writing-editor]',body),writingFeedback=$('[data-writing-feedback]',body),writingCount=$('[data-writing-count]',body);
+    const updateWritingCount=()=>{const words=editor.value.trim().match(/\S+/g)||[],sentences=editor.value.split(/[.!?।]+/).map(value=>value.trim()).filter(Boolean);writingCount.textContent=`${words.length} words · ${sentences.length} sentences`;};
+    try{editor.value=localStorage.getItem(draftKey)||editor.value;}catch(_){}
+    updateWritingCount();editor.addEventListener('input',()=>{updateWritingCount();try{localStorage.setItem(draftKey,editor.value);}catch(_){}});
+    $('[data-writing-check]',body).addEventListener('click',async()=>{
+      const value=editor.value.trim(),sentences=value.split(/[.!?।]+/).map(part=>part.trim()).filter(Boolean),words=value.match(/\S+/g)||[];
+      if(!value){writingFeedback.textContent='Write at least three sentences first. Your draft is saved in this browser.';writingFeedback.hidden=false;return;}
+      const knownFixes=chapter.mistakes.filter(([wrong])=>new RegExp(wrong.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i').test(value));
+      const checks=[];
+      checks.push(sentences.length>=3?'✓ You reached the minimum of three sentences.':`Add ${3-sentences.length} more sentence${3-sentences.length===1?'':'s'} to reach the minimum.`);
+      checks.push(words.length>=20?'✓ You wrote enough detail to review.':'Add a little more detail; aim for at least 20 words.');
+      checks.push(sentences.every(sentence=>/^[A-Z“"'“]/.test(sentence))?'✓ Each sentence begins with a capital letter.':'Check that each sentence starts with a capital letter.');
+      checks.push(/[.!?]$/.test(value)?'✓ Your response ends with punctuation.':'Add a full stop or question mark at the end.');
+      let output=`<strong>Writing check</strong><ul>${checks.map(check=>`<li>${safeText(check)}</li>`).join('')}</ul>`;
+      if(knownFixes.length){const corrected=knownFixes.reduce((text,[wrong,right])=>text.replace(new RegExp(wrong.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'ig'),right),value);output+=`<p><b>Suggested correction:</b> ${safeText(corrected)}</p>`;}
+      else output+='<p>No sentence from the lesson’s common-mistake list was found. Read your draft aloud and check that every sentence has a subject and a verb.</p>';
+      writingFeedback.innerHTML=output;writingFeedback.hidden=false;
+    });
+    const speechRoot=$('[data-chapter-speaking]',body),choice=$('[data-speaking-choice]',speechRoot),prompt=$('[data-speaking-prompt]',speechRoot),record=$('[data-chapter-record]',speechRoot),transcript=$('[data-chapter-transcript]',speechRoot);
+    choice.addEventListener('change',()=>{prompt.textContent=choice.value;});
+    $('[data-chapter-hear]',speechRoot).addEventListener('click',()=>speakTranslation(prompt.textContent,languageCode||'en'));
+    record.addEventListener('click',()=>openPractice(prompt.textContent));
+  }
+  function buildLessonBody(lesson) {
+    const chapter=window.NORTHSTAR_LESSON_CHAPTERS?.[lesson.id];
+    if(chapter)return renderDetailedChapter(lesson,chapter);
+    if(lesson.id==='g-basic-articles') {
+      const tabs=lessonLanguageTabsMarkup();
+      const simple=`<section class="lesson-section"><h3>In simple words</h3><div class="lesson-language-pair"><article class="lesson-language-card lang-en" data-language="en"><strong>English</strong><p>Use <b>a</b> or <b>an</b> for one new thing. Use <b>the</b> when you and the listener both know which thing. Use no article for general plural or uncountable nouns.</p></article><article class="lesson-language-card lang-hi" data-language="hi" lang="hi"><strong>हिन्दी</strong><p>किसी नई चीज़ के लिए <b>a</b> या <b>an</b> लगाएँ। जब आपको और सुनने वाले को पता हो कि कौन-सी चीज़ है, तब <b>the</b> लगाएँ। आम बहुवचन या गिनी न जा सकने वाली संज्ञा के साथ कुछ न लगाएँ।</p></article></div></section>`;
+      const rules=[
+        ['a / an: one new thing','Use a before a consonant sound and an before a vowel sound: a dog, an hour, a university.','व्यंजन की आवाज़ से पहले a और स्वर की आवाज़ से पहले an लगाएँ: a dog, an hour, a university.'],
+        ['the: a thing both people know','Use the when the thing was already mentioned or is unique: I saw a dog. The dog was wet. The sun is hot.','जब चीज़ पहले आ चुकी हो या सिर्फ़ एक ही हो, तब the लगाएँ: I saw a dog. The dog was wet. The sun is hot.'],
+        ['No article: general ideas','Use no article with general plural or uncountable nouns: Dogs need exercise. Music helps me focus.','सामान्य बहुवचन या uncountable noun के साथ article न लगाएँ: Dogs need exercise. Music helps me focus.']
+      ].map(([title,en,hi],index)=>`<article class="lesson-rule-card"><span>${index+1}</span><div class="article-rule-copy"><strong>${title}</strong>${lessonLanguageCard(en,hi)}</div></article>`).join('');
+      const examples=[['She waited for an hour.','उसने एक घंटे तक इंतज़ार किया।'],['I saw a dog. The dog was wet.','मैंने एक कुत्ता देखा। वह कुत्ता गीला था।'],['Dogs need exercise.','कुत्तों को कसरत की ज़रूरत होती है।']].map(([en,hi])=>`<article class="lesson-example-row"><div><span class="example-correct" aria-label="Correct">✓</span><p>${safeText(en)}</p></div><p class="example-hindi" lang="hi">${safeText(hi)}</p></article>`).join('');
+      const mistakes=[['She is teacher.','She is a teacher.'],['I saw dog.','I saw a dog.'],['She likes the music. (general)','She likes music.']].map(([wrong,right])=>`<article class="lesson-mistake-row"><p><span aria-label="Incorrect">×</span>${safeText(wrong)}</p><p><span aria-label="Correct">✓</span>${safeText(right)}</p></article>`).join('');
+      const references='<section class="lesson-section lesson-read-more"><h3>Read more</h3><a href="https://learnenglish.britishcouncil.org/free-resources/grammar/english-grammar-reference" target="_blank" rel="noopener noreferrer">British Council Grammar ↗</a><a href="https://dictionary.cambridge.org/grammar/british-grammar" target="_blank" rel="noopener noreferrer">Cambridge Grammar ↗</a></section>';
+      const writingKey=`northstar-writing:${language}:${level}:${lesson.id}`;
+    return `${tabs}${quickLessonPanels(lesson)}${simple}<section class="lesson-section"><h3>The three rules</h3><div class="lesson-rule-list">${rules}</div></section><section class="lesson-section"><h3>Right and wrong</h3><div class="lesson-examples">${examples}</div><div class="lesson-mistakes">${mistakes}</div></section>${references}${topicPracticeMarkup(lesson)}${topicEndPracticeMarkup(lesson.title,lesson.practice,writingKey,lesson.id)}${lessonPracticeCards()}`;
+    }
+    const note=lesson.notes?.find(item=>typeof item==='object')||{};
+    const en=note.en||lesson.notes?.find(item=>typeof item==='string')||lesson.desc;
+    const hi=note.hi||'इस नियम को छोटे वाक्यों में पढ़ें और फिर बोलकर अभ्यास करें।';
+    const enParts=teachingSentences(en), hiParts=teachingSentences(hi);
+    const simple=`<section class="lesson-section"><h3>In simple words</h3>${lessonLanguageCard(enParts.slice(0,2).join(' '),hiParts.slice(0,2).join(' '))}</section>`;
+    const ruleEn=enParts.slice(2), ruleHi=hiParts.slice(2), ruleCount=Math.min(8,Math.max(ruleEn.length,ruleHi.length));
+    const rules=`<section class="lesson-section"><h3>The rules</h3><div class="lesson-rule-list">${Array.from({length:ruleCount},(_,i)=>`<article class="lesson-rule-card"><span>${String(i+1).padStart(2,'0')}</span>${lessonLanguageCard(ruleEn[i]||'',ruleHi[i]||'')}</article>`).join('')||`<article class="lesson-rule-card"><span>01</span>${lessonLanguageCard(en,hi)}</article>`}</div></section>`;
+    const examples=extractLessonExamples(en,hi);
+    const exampleRows=(examples.length?examples:[{sentence:lesson.practice,hindi:'इस वाक्य को दिए गए नियम के साथ बोलकर देखें।'}]).map(item=>`<article class="lesson-example-row"><div><span class="example-correct" aria-label="Correct">✓</span><p>${safeText(item.sentence)}</p></div><p class="example-hindi" lang="hi">${safeText(item.hindi||'वाक्य का अर्थ संदर्भ पर निर्भर करता है।')}</p></article>`).join('');
+    const exampleSection=`<section class="lesson-section"><h3>Examples</h3><div class="lesson-examples">${exampleRows}</div></section>`;
+    const mistakes=grammarMistakes(lesson.id).map(([wrong,right])=>`<article class="lesson-mistake-row"><p><span aria-label="Incorrect">×</span>${safeText(wrong)}</p><p><span aria-label="Correct">✓</span>${safeText(right)}</p></article>`).join('');
+    const mistakeSection=`<section class="lesson-section"><h3>Common mistakes</h3><div class="lesson-mistakes">${mistakes}</div></section>`;
+    const referenceLinks=lesson.id.startsWith('g-')?'<section class="lesson-section lesson-read-more"><h3>Read more</h3><a href="https://learnenglish.britishcouncil.org/free-resources/grammar/english-grammar-reference" target="_blank" rel="noopener noreferrer">British Council Grammar ↗</a><a href="https://dictionary.cambridge.org/grammar/british-grammar" target="_blank" rel="noopener noreferrer">Cambridge Grammar ↗</a></section>':'';
+    const writingKey=`northstar-writing:${language}:${level}:${lesson.id}`;
+    const tabs=lessonLanguageTabsMarkup();
+    return `${tabs}${quickLessonPanels(lesson)}${simple}${rules}${exampleSection}${mistakeSection}${referenceLinks}${topicPracticeMarkup(lesson)}${topicEndPracticeMarkup(lesson.title,lesson.practice,writingKey,lesson.id)}${lessonPracticeCards()}`;
+  }
+  function openLesson(id) {
+    $('#lessonSpeak')?._recognition?.stop();$('#lessonBody [data-chapter-record]')?._recognition?.stop();
+    const lessons=currentLessons(), lesson=lessons.find(item=>item.id===id); if(!lesson)return;
+    activeLesson=lesson; activeSkill=null;activeLessonScore=null;
+    $('#lessonKicker').textContent=`${level.toUpperCase()} · ${lesson.type} · ${lesson.time.toUpperCase()}`;
+    $('#lessonBody').innerHTML=buildLessonBody(lesson); $('#lessonBody').dataset.language='both';
+    installReaderContent($('#lessonBody'), lesson.title, lesson.desc);
+    const chapter=window.NORTHSTAR_LESSON_CHAPTERS?.[lesson.id];
+    if(chapter){
+      const heading=$('#lessonBody .detail-page-heading'),summary=$('p',heading);
+      if(summary){const text=summary.textContent;summary.dataset.language='en';summary.insertAdjacentHTML('afterend',`<p class="chapter-auto-translation" data-language="translated" data-source-text="${safeText(text)}" hidden></p>`);}
+      const bookmarkKey=`northstar-bookmark:${lesson.id}`,bookmarked=localStorage.getItem(bookmarkKey)==='true';
+      const meta=document.createElement('div');meta.className='chapter-header-meta';meta.innerHTML=`<span>Basic grammar</span><i>·</i><span>Lesson 01</span><i>·</i><span>Beginner</span><i>·</i><span>${safeText(chapter.duration)}</span><button type="button" data-lesson-bookmark aria-pressed="${bookmarked}">${bookmarked?'★ Saved':'☆ Save lesson'}</button>`;
+      heading.append(meta);$('[data-lesson-bookmark]',meta).addEventListener('click',event=>{const button=event.currentTarget,saved=button.getAttribute('aria-pressed')!=='true';button.setAttribute('aria-pressed',String(saved));button.textContent=saved?'★ Saved':'☆ Save lesson';localStorage.setItem(bookmarkKey,String(saved));});
+    }
+    $('#completeLesson').innerHTML='Mark as complete <span>✓</span>';
+    const index=lessons.findIndex(item=>item.id===id);$('#previousLesson').disabled=index<=0;$('#nextLesson').disabled=index>=lessons.length-1;
+    if(chapter)bindChapterActivities(chapter,lesson);else{bindTopicEndPractice(`northstar-writing:${language}:${level}:${lesson.id}`,lesson.id);bindTopicPractice();}
+    $('#lessonBody').querySelectorAll('[data-lesson-language]').forEach(button=>button.addEventListener('click',()=>setLessonLanguage(button.dataset.lessonLanguage)));
+    const languageSelect=$('#lessonTranslationLanguage');if(languageSelect){languageSelect.value=lessonTranslationCode;languageSelect.addEventListener('change',()=>{lessonTranslationCode=languageSelect.value;localStorage.setItem(lessonTranslationKey,lessonTranslationCode);setLessonLanguage('translated');});}
+    const savedLanguage=localStorage.getItem(readerLanguageKey)||'both'; setLessonLanguage(savedLanguage==='hi'?'translated':savedLanguage);
+    openReadingModal('lessonModal', `lesson-${lesson.id}`);
+  }
+  let lessonTranslationRequest=0;
+  const lessonTranslationCache=new Map();
+  async function queueChapterTranslations(code,body=$('#lessonBody')){
+    if(!body?.isConnected||code==='en'||body.dataset.language==='en')return;
+    const candidates=[...$$('.lesson-language-card.lang-hi p',body),...$$('.lesson-example-row .example-hindi',body),...$$('.chapter-auto-translation',body)];
+    const visible=candidates.filter(target=>!target.dataset.translating&&target.dataset.translationCode!==code).filter(target=>{const box=(target.closest('.lesson-language-card')||target.closest('.chapter-language-pair')||target).getBoundingClientRect();return box.bottom>0&&box.top<window.innerHeight;}).slice(0,8);
+    if(!visible.length)return;
+    const request=++lessonTranslationRequest;let failed=false;
+    await Promise.all(visible.map(async target=>{
+      target.dataset.translating='true';
+      const card=target.closest('.lesson-language-card'),auto=target.classList.contains('chapter-auto-translation');
+      if(!target.dataset.originalHtml)target.dataset.originalHtml=target.innerHTML;
+      if(!target.dataset.sourceText){const clone=target.cloneNode(true);clone.querySelectorAll('span').forEach(node=>node.remove());target.dataset.sourceText=clone.textContent.trim();}
+      if(auto){target.textContent='Translating…';target.hidden=false;}
+      if(code==='hi'&&card){target.innerHTML=target.dataset.originalHtml;target.lang='hi';card.dataset.language='hi';card.lang='hi';const label=card.querySelector('strong');if(label)label.textContent='हिन्दी';target.dataset.translationCode=code;target.hidden=false;delete target.dataset.translating;return;}
+      let source=card?.parentElement?.querySelector('.lesson-language-card.lang-en p');
+      if(!source)source=target.closest('.lesson-example-row')?.querySelector(':scope > div p');
+      const text=(auto||target.closest('.chapter-mistake'))?target.dataset.sourceText:(source?.textContent?.trim()||target.dataset.sourceText);
+      const cacheKey=`${code}:${text}`;
+      try{
+        const translated=lessonTranslationCache.get(cacheKey)||await translateWithGoogle(text,'en',code);lessonTranslationCache.set(cacheKey,translated);
+        if(request!==lessonTranslationRequest&&body.dataset.translationTarget!==code){delete target.dataset.translating;queueChapterTranslations(body.dataset.translationTarget,body);return;}
+        target.innerHTML=safeText(translated);target.lang=code;target.dataset.translationCode=code;target.hidden=false;
+        if(card){card.dataset.language='translated';card.lang=code;const label=card.querySelector('strong');if(label)label.textContent=languages.find(([,languageCode])=>languageCode===code)?.[0]||'Translation';}
+      }catch(_){if(body.dataset.translationTarget!==code){delete target.dataset.translating;queueChapterTranslations(body.dataset.translationTarget,body);return;}failed=true;target.innerHTML=card?target.dataset.originalHtml:safeText(text);target.lang='en';target.dataset.translationCode=code;target.hidden=false;if(card){card.dataset.language='translated';card.lang='en';}}
+      delete target.dataset.translating;
+    }));
+    if(failed&&request===lessonTranslationRequest)showToast('Some explanations could not be translated. The English text is still available.');
+  }
+  async function updateLessonTranslation(code){
+    const request=++lessonTranslationRequest,body=$('#lessonBody');
+    if(body.querySelector('.chapter-concept')){body.dataset.translationTarget=code;if(code==='hi'){ $$('.lesson-language-card.lang-hi',body).forEach(card=>{const paragraph=$('p',card);if(paragraph?.dataset.originalHtml)paragraph.innerHTML=paragraph.dataset.originalHtml;card.dataset.language='hi';card.lang='hi';const label=$('strong',card);if(label)label.textContent='हिन्दी';});}queueChapterTranslations(code,body);return;}
+    const targets=[...$$('.lesson-language-card.lang-hi p',body),...$$('.lesson-example-row .example-hindi',body)];
+    const tasks=targets.map(target=>({target,kind:'paired'}));
+    $$('.chapter-auto-translation',body).forEach(target=>tasks.push({target,kind:'auto'}));
+    $$('.lesson-mistake-row p:not(.translated-copy)',body).forEach(target=>tasks.push({target,kind:'mistake'}));
+    const results=await Promise.all(tasks.map(async ({target,kind})=>{
+      if(!target.dataset.originalHtml)target.dataset.originalHtml=target.innerHTML;
+      if(!target.dataset.sourceText){const clone=target.cloneNode(true);clone.querySelectorAll('span').forEach(node=>node.remove());target.dataset.sourceText=clone.textContent.trim();}
+      if(code==='hi'&&kind==='paired')return {target,kind,html:target.dataset.originalHtml,failed:false};
+      let source=target.closest('.lesson-language-card')?.parentElement?.querySelector('.lesson-language-card.lang-en p');
+      if(!source)source=target.closest('.lesson-example-row')?.querySelector(':scope > div p');
+      const text=kind==='mistake'||kind==='auto'?target.dataset.sourceText:(source?.textContent?.trim()||'');
+      try{return {target,kind,html:safeText(await translateWithGoogle(text,'en',code)),failed:false};}
+      catch(_){return {target,kind,html:kind==='paired'?target.dataset.originalHtml:safeText(text),failed:true};}
+    }));
+    if(request!==lessonTranslationRequest)return;
+    let failed=false;
+    results.forEach(({target,kind,html,failed:didFail})=>{
+      if(kind==='auto'){
+        target.innerHTML=html;target.lang=didFail?'en':code;target.hidden=false;
+      } else if(kind==='mistake'){
+        let copy=target.nextElementSibling?.classList.contains('translated-copy')?target.nextElementSibling:null;
+        if(!copy){copy=document.createElement('p');copy.className='translated-copy';copy.dataset.language='translated';target.after(copy);}
+        const badge=target.querySelector('span')?.outerHTML||'';copy.innerHTML=badge+html;copy.lang=didFail?'hi':code;
+      } else {
+        target.innerHTML=html;
+        const card=target.closest('.lesson-language-card');
+        if(card){
+          const languageName=languages.find(([,languageCode])=>languageCode===(didFail?'hi':code))?.[0]||'Hindi';
+          target.lang=didFail?'hi':code;
+          card.dataset.language=didFail?'hi':'translated';
+          card.lang=didFail?'hi':code;
+          const label=card.querySelector('strong');if(label)label.textContent=languageName==='Hindi'?'हिन्दी':languageName;
+        } else target.lang=didFail?'hi':code;
+      }
+      failed ||= didFail;
+    });
+    if(failed)showToast('Some translations could not load. Try again or choose Hindi.');
+  }
+  function setLessonLanguage(value) {
+    const body=$('#lessonBody'),mode=value==='hi'?'translated':value;
+    body.dataset.language=mode;
+    try{localStorage.setItem(readerLanguageKey,mode);}catch(_){}
+    $$('[data-lesson-language]',body).forEach(button=>{const selected=button.dataset.lessonLanguage===mode;button.classList.toggle('active',selected);button.setAttribute('aria-pressed',String(selected));button.setAttribute('aria-selected',String(selected));});
+    $('#lessonTranslationLanguageLabel')?.classList.toggle('active',mode==='translated');
+    updateLessonTranslation(lessonTranslationCode);
+  }
+  function openVocabularyWordRoute(word) { renderVocabularyWord(word);installReaderContent($('#vocabularyModalBody'), 'Vocabulary', '');$('#vocabularyModal .detail-modal').scrollTop=0; }
+  function restoreVocabularyCard() { const card=$('#vocabularyCard');if(card&&$('#vocabularyPlaceholder')){$('#vocabularyPlaceholder').after(card);card.hidden=true;} }
+  function closeModal(id, fromHistory = false, transitionToAnother = false) {
+    const modal=$(`#${id}`);if(!modal)return;modal.hidden=true;
+    if(id==='lessonModal'){ $('#lessonSpeak')?._recognition?.stop();$('#lessonBody [data-chapter-record]')?._recognition?.stop(); }
+    if(id==='vocabularyModal'){restoreVocabularyCard();$('#vocabularyBack').hidden=true;}
+    if(!$$('.modal-backdrop:not([hidden])').length){
+      if (transitionToAnother) history.replaceState({...history.state,northstarReadingModal:null}, '', `${location.pathname}${location.search}`);
+      else { setReaderBodyLock(false);if(!fromHistory&&history.state?.northstarReadingModal===id)history.back();else if(!fromHistory&&location.hash)history.replaceState(history.state, '', `${location.pathname}${location.search}`);if(lastDetailTrigger?.isConnected)lastDetailTrigger.focus(); }
+    }
+  }
+  function moveLesson(delta) { const lessons=currentLessons(),index=lessons.findIndex(item=>item.id===activeLesson?.id),next=lessons[index+delta];if(next)openLesson(next.id); }
+  $('#previousLesson').addEventListener('click',()=>moveLesson(-1));$('#nextLesson').addEventListener('click',()=>moveLesson(1));
+  const detailTextKey='northstar-detail-font-step';
+  let detailTextStep=Math.max(0,Math.min(2,Number(localStorage.getItem(detailTextKey) ?? localStorage.getItem(readerFontKey) ?? 1)));
+  function applyDetailTextSize(){ $$('.detail-modal').forEach(modal=>modal.dataset.textSize=String(detailTextStep)); try{localStorage.setItem(detailTextKey,String(detailTextStep));localStorage.setItem(readerFontKey,String(detailTextStep));}catch(_){} }
+  applyDetailTextSize();
+  $('#detailTextLarger')?.addEventListener('click',()=>{detailTextStep=Math.min(2,detailTextStep+1);applyDetailTextSize();});
+  $$('[data-text-decrease]').forEach(button=>button.addEventListener('click',()=>{detailTextStep=Math.max(0,detailTextStep-1);applyDetailTextSize();}));
+  $$('[data-text-increase]').forEach(button=>button.addEventListener('click',()=>{detailTextStep=Math.min(2,detailTextStep+1);applyDetailTextSize();}));
+  $$('[data-close]').forEach(button=>button.addEventListener('click',()=>{if(button.classList.contains('placement-close'))return;button.dataset.close==='practiceModal'?stopSession():closeModal(button.dataset.close);}));
+  $('#placementModal .placement-close')?.addEventListener('click',event=>{
+    event.preventDefault();
+    const placementDialog=$('#placementModal');
+    placementDialog.hidden=true;
+    closeModal('placementModal');
+  });
   $$('.modal-backdrop').forEach(backdrop=>backdrop.addEventListener('click',event=>{if(event.target===backdrop){if(backdrop.id==='practiceModal')stopSession();else closeModal(backdrop.id);}}));
-  document.addEventListener('keydown',event=>{if(event.key==='Escape')$$('.modal-backdrop:not([hidden])').forEach(modal=>modal.id==='practiceModal'?stopSession():closeModal(modal.id));});
+  document.addEventListener('keydown',event=>{
+    const modal=$$('.modal-backdrop:not([hidden])').at(-1); if(!modal)return;
+    if(event.key==='Escape'){event.preventDefault();modal.id==='practiceModal'?stopSession():closeModal(modal.id);return;}
+    if(event.key==='Tab'){
+      const dialog=modal.querySelector('[role="dialog"]'),focusable=$$('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex="0"]',dialog).filter(item=>!item.hidden&&item.getAttribute('aria-hidden')!=='true');
+      if(!focusable.length)return;const first=focusable[0],last=focusable[focusable.length-1];
+      if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+    }
+  });
   $('#completeLesson').addEventListener('click', async () => {
     const itemId = activeSkill ? `soft-${activeSkill.id}` : activeLesson?.id;
     if (!itemId) return;
     try {
-      const response=await fetch(`/api/learning/progress/${encodeURIComponent(itemId)}`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({})});
+      const response=await fetch(`/api/learning/progress/${encodeURIComponent(itemId)}`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({score:activeLesson?activeLessonScore:null})});
       if (!response.ok) throw new Error();
       completed.set(itemId,null); renderLessons(); closeModal('lessonModal'); activeLesson=null; activeSkill=null;
       $('#progressLessons').textContent=completed.size;
@@ -696,31 +1269,31 @@
     $$('.soft-skill-card').forEach(card=>card.addEventListener('click',()=>openSkill(card.dataset.skill)));
   }
   function openSkill(id) {
-    activeSkill=skills.find(skill=>skill.id===id); if(!activeSkill)return; activeLesson=null; $('#completeLesson').textContent='Mark this skill practised ✓';
+    activeSkill=skills.find(skill=>skill.id===id); if(!activeSkill)return; activeLesson=null;activeLessonScore=null; $('#completeLesson').textContent='Mark this skill practised ✓';
     $('#lessonKicker').textContent=`SOFT SKILLS · ${activeSkill.tag}`;
-    $('#lessonTitle').textContent=activeSkill.title;
-    $('#lessonSummary').textContent=activeSkill.desc;
     const writingKey=`northstar-soft-writing:${activeSkill.id}`;
-    $('#lessonBody').innerHTML=`<div class="lesson-note-card"><strong>A SIMPLE FRAMEWORK</strong><ol>${activeSkill.framework.map(item=>`<li>${safeText(item)}</li>`).join('')}</ol></div><div class="lesson-practice-card"><span>SCENARIO PRACTICE</span><p>${safeText(activeSkill.prompt)}</p><button class="inline-practice" id="skillSpeak">Rehearse this scenario <span><svg aria-hidden="true"><use href="/static/icons.svg?v=northstar-icons-20261028-2#icon-mic"></use></svg></span></button></div>${writingPracticeMarkup(writingKey, 'Write a brief response to this scenario, then compare it with the framework above.')}`;
-    bindWritingPractice(writingKey);
-    $('#lessonModal').hidden=false;document.body.classList.add('modal-open');
-    $('#skillSpeak').addEventListener('click',()=>{closeModal('lessonModal');$('#practiceGoal').value=activeSkill.title;currentMode='guided';openPractice(activeSkill.prompt);});
+    $('#lessonBody').innerHTML=`${quickLessonPanels(activeSkill)}<section class="lesson-section"><h3>Key steps</h3><div class="lesson-note-card"><ol>${activeSkill.framework.map(item=>`<li>${safeText(item)}</li>`).join('')}</ol></div></section><section class="lesson-section"><h3>Try the scenario</h3><div class="lesson-practice-card"><p>${safeText(activeSkill.prompt)}</p></div></section>${topicPracticeMarkup({...activeSkill,notes:activeSkill.framework})}${topicEndPracticeMarkup(activeSkill.title,activeSkill.prompt,writingKey,activeSkill.id)}${lessonPracticeCards()}`;
+    installReaderContent($('#lessonBody'), activeSkill.title, activeSkill.desc);
+    bindTopicPractice();
+    bindTopicEndPractice(writingKey,activeSkill.id);
+    openReadingModal('lessonModal', `skill-${activeSkill.id}`);
   }
   renderSkills();
 
   function openPractice(prompt) {
-    $('#practiceModal').hidden=false; document.body.classList.add('modal-open');
-    $('#sessionSetup').hidden=false; $('#liveSession').hidden=true; $('#practiceTitle').textContent='Let’s find your focus.';
+    $('#sessionSetup').hidden=false; $('#liveSession').hidden=true;
+    $('#practiceTitle').textContent='Set up your session';
     $('#practiceSituation').value=prompt||'';
+    openReadingModal('practiceModal','practice');
     $('#situationVoiceStatus').textContent='Type a situation or dictate it with your microphone.';
-    if (prompt) { $('#practiceGoal').value='Other'; $('#practiceGoal').dataset.customPrompt=prompt; }
+    if(prompt){$('#practiceGoal').value='Other';$('#practiceGoal').dataset.customPrompt=prompt;}
     else delete $('#practiceGoal').dataset.customPrompt;
     $$('.mode-choice').forEach(button=>button.classList.toggle('selected',button.dataset.mode===currentMode));
+    $$('.voice-purpose-options [data-practice-goal]').forEach(button=>button.classList.toggle('selected',button.dataset.practiceGoal===$('#practiceGoal').value));
   }
-  $('#openPractice').addEventListener('click',()=>openPractice());
   $('#recordSituation').addEventListener('click',()=>{
     const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
-    if(!SpeechRecognition){$('#situationVoiceStatus').textContent='Voice input is not supported in this browser. Type your situation instead.';return;}
+    if(!SpeechRecognition){$('#situationVoiceStatus').textContent='Voice input is not supported here. Type your situation instead.';return;}
     if(situationRecognition){try{situationRecognition.abort()}catch(_){}situationRecognition=null;}
     situationRecognition=new SpeechRecognition();situationRecognition.lang=languageLocale;situationRecognition.continuous=false;situationRecognition.interimResults=true;situationRecognition.maxAlternatives=1;
     $('#situationVoiceStatus').textContent=`Listening in ${language}…`;
@@ -729,24 +1302,49 @@
     situationRecognition.onend=()=>{if($('#practiceSituation').value.trim())$('#situationVoiceStatus').textContent='Situation captured. You can edit it before starting.';situationRecognition=null;};
     try{situationRecognition.start()}catch(_){$('#situationVoiceStatus').textContent='The microphone could not start. Type your situation instead.';}
   });
+  $$('.voice-purpose-options [data-practice-goal]').forEach(button=>button.addEventListener('click',()=>{
+    $$('.voice-purpose-options [data-practice-goal]').forEach(item=>item.classList.toggle('selected',item===button));
+    $('#practiceGoal').value=button.dataset.practiceGoal;delete $('#practiceGoal').dataset.customPrompt;
+  }));
+  $$('.voice-duration-options [data-duration]').forEach(button=>button.addEventListener('click',()=>{
+    selectedPracticeDuration=Number(button.dataset.duration);
+    $$('.voice-duration-options [data-duration]').forEach(item=>item.classList.toggle('selected',item===button));
+  }));
   $('#softStart').addEventListener('click',()=>{switchSection('soft');openPractice('Tell me one situation where you would like to feel more confident.');});
   $('#softScenario').addEventListener('click',()=>{switchSection('soft');openPractice('A teammate disagrees with your idea. How would you respond while keeping the conversation constructive?');});
-  $$('.mode-choice').forEach(button=>button.addEventListener('click',()=>{$$('.mode-choice').forEach(item=>item.classList.remove('selected'));button.classList.add('selected');currentMode=button.dataset.mode;}));
+  $$('.mode-choice').forEach(button=>button.addEventListener('click',()=>{$$('.mode-choice').forEach(item=>item.classList.toggle('selected',item===button));currentMode=button.dataset.mode;}));
+  function updateVoiceProgress(){
+    const prompts=voicePrompts[currentMode]||voicePrompts.guided;
+    $('#voicePromptCount').textContent=`PROMPT ${currentPromptIndex+1} OF ${prompts.length}`;
+    $('#voiceProgress').innerHTML=prompts.map((_,index)=>`<i class="${index<currentPromptIndex?'done':''} ${index===currentPromptIndex?'current':''}"></i>`).join('');
+  }
+  async function loadVoiceSummary(){
+    try{const response=await fetch('/api/learning/voice-sessions/summary');if(!response.ok)return;const data=await response.json();
+      const status=$('#voicePracticeStatus');if(!status)return;
+      status.textContent=data.sessions?`${data.sessions} completed session${data.sessions===1?'':'s'} · ${data.minutes} minutes practised${data.latest?.goal?` · Last: ${data.latest.goal}`:''}`:'Your practice history will appear here.';
+    }catch(_){/* Practice remains available when history cannot load. */}
+  }
+  loadVoiceSummary();
   $('#beginSession').addEventListener('click',async()=>{
-    if(languageCode!=='en'&&!localizedPrompts[languageCode]){showToast(`Conversation prompts for ${language} are not available in this preview.`);return;}
     if(situationRecognition){try{situationRecognition.abort()}catch(_){}situationRecognition=null;}
-    activePracticeSituation=$('#practiceSituation').value.trim();
-    goal=$('#practiceGoal').value; await saveProfile(true);
-    $('#sessionSetup').hidden=true;$('#liveSession').hidden=false;
-    $('#practiceTitle').textContent='Take your time. I’m listening.';
-    $('#liveModeLabel').textContent=`${currentMode.toUpperCase()} PRACTICE · ${language.toUpperCase()}`;
-    const spokenPrompts=localizedPrompts[languageCode] || prompts[currentMode];
-    $('#coachPrompt').textContent=activePracticeSituation || $('#practiceGoal').dataset.customPrompt || (languageCode && languageCode!=='en' ? spokenPrompts[0] : (goalPrompts[goal] || prompts[currentMode][0]));
-    $('#conversationFeed').innerHTML=`<div class="coach-bubble"><span class="coach-avatar"><svg aria-hidden="true"><use href="/static/icons.svg?v=northstar-icons-20261028-2#icon-northstar"></use></svg></span><p id="coachPrompt">${safeText($('#coachPrompt').textContent)}</p></div>`;
-    $('#transcriptBox').textContent='Your words will appear here after you finish speaking.';$('#coachFeedback').hidden=true;
-    currentPromptIndex=0;$('#sessionTimer').textContent='00:00';$('#micHint').textContent='Tap the microphone when you\'re ready to speak.';
-    sessionActive=true;sessionSeconds=0;clearInterval(timerId);timerId=setInterval(()=>{sessionSeconds++;$('#sessionTimer').textContent=`${String(Math.floor(sessionSeconds/60)).padStart(2,'0')}:${String(sessionSeconds%60).padStart(2,'0')}`},1000);
-    speakPrompt($('#coachPrompt').textContent);
+    activePracticeSituation=$('#practiceSituation').value.trim();goal=$('#practiceGoal').value;await saveProfile(true);
+    backendVoiceSessionId=null;
+    try{const response=await fetch('/api/learning/voice-sessions',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({practice_mode:currentMode,goal,language,planned_minutes:selectedPracticeDuration})});if(response.ok){const data=await response.json();backendVoiceSessionId=data.session_id;}else showToast('Practice started, but your session could not be saved.');}
+    catch(_){showToast('Practice started offline. Session history could not be saved.');}
+    $('#sessionSetup').hidden=true;$('#liveSession').hidden=false;$('#practiceTitle').textContent='';
+    $('#liveModeLabel').textContent=goal.toUpperCase();
+    currentPromptIndex=0;voicePromptCount=0;sessionSeconds=0;
+    const promptList=voicePrompts[currentMode]||voicePrompts.guided;
+    const firstPrompt=activePracticeSituation||$('#practiceGoal').dataset.customPrompt||goalPrompts[goal]||promptList[0];
+    $('#coachPrompt').textContent=firstPrompt;$('#transcriptBox').textContent='Your words will appear here after you finish speaking.';$('#coachFeedback').hidden=true;
+    $('#micHint').textContent=currentMode==='guided'?'Listen to the prompt, then speak when you are ready.':'Listening… speak naturally';
+    $('#sessionTimer').textContent=`${String(selectedPracticeDuration).padStart(2,'0')}:00 left`;updateVoiceProgress();
+    sessionActive=true;clearInterval(timerId);timerId=setInterval(()=>{
+      sessionSeconds++;const remaining=Math.max(0,selectedPracticeDuration*60-sessionSeconds);
+      $('#sessionTimer').textContent=`${String(Math.floor(remaining/60)).padStart(2,'0')}:${String(remaining%60).padStart(2,'0')} left`;
+      if(remaining===0)stopSession(true);
+    },1000);
+    if(currentMode==='guided')speakPrompt(firstPrompt);
   });
   function speakPrompt(text) {
     if (!('speechSynthesis' in window)) return;
@@ -754,36 +1352,25 @@
   }
   $('#listenPrompt').addEventListener('click',()=>speakPrompt($('#coachPrompt').textContent));
   function coachOnTranscript(text) {
-    const clean=text.trim();
-    $('#transcriptBox').textContent=clean || 'I did not catch that clearly. Try again when you are ready.';
-    const words=clean.match(/[\p{L}']+/gu)||[];
-    const fillers=languageCode==='en'?(clean.match(/\b(um|uh|erm|like|you know)\b/gi)||[]).length:null;
-    let response=languageCode==='en'?'Good start—I understood your main idea. Keep going and add one more detail or example.':`Transcript captured. Automated grammar feedback is available for English only; ask a fluent speaker to review your ${language} response.`;
-    let retry=false;
-    const pastCue=/\b(yesterday|last (?:night|week|month)|ago)\b/i.test(clean);
-    if(languageCode==='en' && pastCue && /\bi go\b/i.test(clean)) { response='I understood you. Since you mentioned a finished time, try “I went” instead of “I go”. Say the sentence once more when you are ready.'; retry=true; }
-    else if(languageCode==='en' && words.length<7) response='Nice start. Can you add one more sentence explaining why or what happened next?';
-    else if(languageCode==='en' && fillers>=3) response='Your idea came through. Try a short pause instead of a filler word, then continue with your next point.';
-    $('#coachFeedback').innerHTML=`<span>BASIC PRACTICE FEEDBACK · TRANSCRIPT ONLY</span><p>${safeText(response)}</p><small>${words.length} recognized word units · ${fillers===null?'filler-word review unavailable for this language':`${fillers} English filler words`} · no pronunciation score</small>`;
-    $('#coachFeedback').hidden=false;
-    $('#micHint').textContent='You can try again, or hear the next prompt.';
+    const clean=text.trim();$('#transcriptBox').textContent=clean||'I did not catch that clearly. Try again when you are ready.';
+    const words=clean.match(/[\p{L}']+/gu)||[];const fillers=languageCode==='en'?(clean.match(/\b(um|uh|erm|like|you know)\b/gi)||[]).length:null;
+    let response=languageCode==='en'?'Good start—I understood your main idea. Add one more detail or example to make your answer clearer.':`Transcript captured. Automated grammar feedback is available for English only; ask a fluent speaker to review your ${language} response.`;
+    if(languageCode==='en'&&words.length<7)response='Nice start. Can you add one more sentence explaining why or what happened next?';
+    else if(languageCode==='en'&&fillers>=3)response='Your idea came through. Try a short pause instead of a filler word, then continue.';
+    $('#coachFeedback').innerHTML=`<span>QUICK FEEDBACK · TRANSCRIPT ONLY</span><p>${safeText(response)}</p><small>${words.length} recognized word units · no pronunciation score</small>`;$('#coachFeedback').hidden=false;
+    voicePromptCount++;$('#micHint').textContent='Ready when you are. Continue or move to the next prompt.';
     if(languageCode==='en')speakPrompt(response);
-    if (!retry && sessionActive) {
-      currentPromptIndex++;
-      const activePrompts=activePracticeSituation
-        ? ['In this situation, what would you say first?','How might the other person respond, and what would you say next?','What outcome do you want, and how could you ask for it clearly?']
-        : (localizedPrompts[languageCode] || (languageCode==='en' ? (prompts[currentMode] || prompts.guided) : []));
-      if(!activePrompts.length){$('#micHint').textContent=`Prompts for ${language} are not reviewed in this practice preview.`;return;}
-      const next = activePrompts[currentPromptIndex % activePrompts.length];
-      setTimeout(() => {
-        if (!sessionActive) return;
-        $('#coachPrompt').textContent = next;
-        const bubble=document.createElement('div'); bubble.className='coach-bubble next-coach-bubble';
-        bubble.innerHTML=`<span class="coach-avatar"><svg aria-hidden="true"><use href="/static/icons.svg?v=northstar-icons-20261028-2#icon-northstar"></use></svg></span><p>${safeText(next)}</p>`; $('#conversationFeed').appendChild(bubble);
-        speakPrompt(next); $('#micHint').textContent='Tap the microphone when you are ready to answer.';
-      }, 1800);
-    }
   }
+  async function advanceVoicePrompt(skipped=false){
+    if(!sessionActive)return;
+    if(skipped||$('#transcriptBox').textContent==='Your words will appear here after you finish speaking.')voicePromptCount++;
+    currentPromptIndex=(currentPromptIndex+1)%(voicePrompts[currentMode]||voicePrompts.guided).length;
+    const list=voicePrompts[currentMode]||voicePrompts.guided;let next=list[currentPromptIndex];
+    if(activePracticeSituation){const contextual=['What would you say first in this situation?','How might the other person respond, and what would you say next?','What outcome do you want, and how could you ask for it clearly?'];next=contextual[currentPromptIndex%contextual.length];}
+    if(languageCode&&languageCode!=='en')next=await translateActivityText(next,languageCode);
+    if(!sessionActive)return;$('#coachPrompt').textContent=next;$('#transcriptBox').textContent='Your words will appear here after you finish speaking.';$('#coachFeedback').hidden=true;updateVoiceProgress();$('#micHint').textContent='Listening… speak naturally';speakPrompt(next);
+  }
+  $('#nextPrompt').addEventListener('click',()=>advanceVoicePrompt(false));$('#skipPrompt').addEventListener('click',()=>advanceVoicePrompt(true));
   function startRecognition() {
     const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
     if(!SpeechRecognition){$('#micHint').textContent='Speech recognition is not available here. Try the latest Chrome or Edge, or practise out loud without a transcript.';showToast('This browser does not support speech recognition.');return;}
@@ -797,8 +1384,12 @@
     try{recognition.start()}catch(_){$('#micHint').textContent='The microphone could not start. Wait a moment and try again.';}
   }
   $('#micButton').addEventListener('click',startRecognition);
-  function stopSession() {
-    sessionActive=false;clearInterval(timerId);if(recognition){try{recognition.abort()}catch(_){}recognition=null;}if('speechSynthesis'in window)window.speechSynthesis.cancel();closeModal('practiceModal');$('#sessionSetup').hidden=false;$('#liveSession').hidden=true;
+  async function stopSession(completed=false) {
+    const sessionId=backendVoiceSessionId;backendVoiceSessionId=null;
+    sessionActive=false;clearInterval(timerId);if(recognition){try{recognition.abort()}catch(_){}recognition=null;}if('speechSynthesis'in window)window.speechSynthesis.cancel();
+    closeModal('practiceModal');$('#sessionSetup').hidden=false;$('#liveSession').hidden=true;
+    if(sessionId){try{const response=await fetch(`/api/learning/voice-sessions/${sessionId}`,{method:'PATCH',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({status:completed?'completed':'abandoned',elapsed_seconds:sessionSeconds,prompt_count:voicePromptCount})});if(!response.ok)showToast('Practice ended, but session history could not be saved.');}catch(_){showToast('Practice ended, but session history could not be saved.');}}
+    if(completed)loadVoiceSummary();
   }
-  $('#endSession').addEventListener('click',stopSession);
+  $('#endSession').addEventListener('click',()=>stopSession(true));
 })();

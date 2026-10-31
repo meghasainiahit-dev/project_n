@@ -95,4 +95,21 @@ def init_db():
               CONSTRAINT fk_aptitude_progress_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
         """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS voice_practice_sessions (
+              id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+              user_id BIGINT UNSIGNED NOT NULL,
+              practice_mode VARCHAR(24) NOT NULL,
+              goal VARCHAR(80) NOT NULL,
+              language VARCHAR(80) NOT NULL,
+              planned_minutes TINYINT UNSIGNED NOT NULL,
+              elapsed_seconds SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+              prompt_count TINYINT UNSIGNED NOT NULL DEFAULT 0,
+              status VARCHAR(16) NOT NULL DEFAULT 'in_progress',
+              started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              ended_at TIMESTAMP NULL DEFAULT NULL,
+              INDEX idx_voice_sessions_user_started (user_id, started_at),
+              CONSTRAINT fk_voice_session_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+        """)
 

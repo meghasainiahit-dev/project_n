@@ -1,9 +1,13 @@
+import asyncio
 import hashlib
 import hmac
+import json
 import logging
 import os
 import secrets
 import smtplib
+import urllib.parse
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 
@@ -258,6 +262,48 @@ async def get_learning_profile(request: Request):
     return profile or {"language": "English", "level": "Basic", "goal": "Everyday conversation", "practice_mode": "guided"}
 
 
+@app.post("/api/learning/transliterate")
+async def transliterate_bengali(request: Request):
+    if not request.session.get("email_verified"):
+        return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+    if not valid_csrf(request, request.headers.get("x-csrf-token", "")):
+        return JSONResponse({"detail": "Invalid form token"}, status_code=403)
+    try:
+        payload = await request.json()
+        text = payload.get("text", "").strip()
+        code = payload.get("language", "")
+    except (ValueError, AttributeError):
+        return JSONResponse({"detail": "Invalid request"}, status_code=400)
+    if not text or len(text.encode("utf-8")) > 500:
+        return JSONResponse({"detail": "Text must contain 1–500 bytes"}, status_code=422)
+    input_methods = {
+        "ar": "ar-t-i0-und", "bn": "bn-t-i0-und", "fa": "fa-t-i0-und", "gu": "gu-t-i0-und",
+        "hi": "hi-t-i0-und", "ja": "ja-t-i0-und", "mr": "mr-t-i0-und", "ne": "ne-t-i0-und",
+        "pa": "pa-t-i0-und", "ru": "ru-t-i0-und", "ta": "ta-t-i0-und", "te": "te-t-i0-und",
+        "ur": "ur-t-i0-und", "zh": "zh-t-i0-pinyin",
+    }
+    if code not in input_methods:
+        return JSONResponse({"detail": "Roman typing is not available for this language yet. Choose on-screen keys or type in its script."}, status_code=422)
+
+    def convert():
+        query = urllib.parse.urlencode({"text": text, "itc": input_methods[code], "num": "1"})
+        req = urllib.request.Request(
+            f"https://inputtools.google.com/request?{query}",
+            headers={"User-Agent": "Northstar/1.0", "Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=8) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        candidate = data[1][0][1][0] if data and data[0] == "SUCCESS" else ""
+        if not candidate:
+            raise ValueError("No Bengali transliteration returned")
+        return {"text": candidate}
+
+    try:
+        return await asyncio.to_thread(convert)
+    except Exception:
+        return JSONResponse({"detail": "Could not convert that spelling. Try another spelling or use on-screen keys."}, status_code=502)
+
+
 @app.post("/api/learning/profile")
 async def save_learning_profile(request: Request):
     if not request.session.get("email_verified"):
@@ -282,6 +328,81 @@ async def save_learning_profile(request: Request):
             (request.session["user_id"], language, level, goal, mode),
         )
     return {"saved": True, "language": language, "level": level, "goal": goal, "practice_mode": mode}
+
+
+@app.get("/api/learning/voice-sessions/summary")
+async def get_voice_practice_summary(request: Request):
+    if not request.session.get("email_verified"):
+        return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+    with connection() as db, db.cursor() as cur:
+        cur.execute(
+            """SELECT COUNT(*) AS sessions, COALESCE(SUM(FLOOR(elapsed_seconds/60)),0) AS minutes
+               FROM voice_practice_sessions WHERE user_id=%s AND status='completed'""",
+            (request.session["user_id"],),
+        )
+        summary = cur.fetchone() or {"sessions": 0, "minutes": 0}
+        cur.execute(
+            """SELECT goal, language, planned_minutes, elapsed_seconds, prompt_count, ended_at
+               FROM voice_practice_sessions WHERE user_id=%s AND status='completed'
+               ORDER BY ended_at DESC LIMIT 1""",
+            (request.session["user_id"],),
+        )
+        latest = cur.fetchone()
+    return {"sessions": int(summary["sessions"]), "minutes": int(summary["minutes"]), "latest": latest}
+
+
+@app.post("/api/learning/voice-sessions")
+async def start_voice_practice_session(request: Request):
+    if not request.session.get("email_verified"):
+        return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+    if not valid_csrf(request, request.headers.get("x-csrf-token", "")):
+        return JSONResponse({"detail": "Invalid form token"}, status_code=403)
+    try:
+        payload = await request.json()
+        mode = str(payload.get("practice_mode", "guided"))
+        goal = str(payload.get("goal", "Everyday conversation")).strip()[:80]
+        language = str(payload.get("language", "English")).strip()[:80]
+        planned = int(payload.get("planned_minutes", 10))
+    except (ValueError, TypeError, AttributeError):
+        return JSONResponse({"detail": "Invalid voice practice session"}, status_code=400)
+    if mode not in {"free", "guided", "challenge"} or planned not in {5, 10, 15} or not goal or not language:
+        return JSONResponse({"detail": "Choose a valid practice mode, purpose, language, and duration."}, status_code=422)
+    with connection() as db, db.cursor() as cur:
+        cur.execute(
+            """INSERT INTO voice_practice_sessions (user_id,practice_mode,goal,language,planned_minutes)
+               VALUES (%s,%s,%s,%s,%s)""",
+            (request.session["user_id"], mode, goal, language, planned),
+        )
+        session_id = cur.lastrowid
+    return {"saved": True, "session_id": session_id}
+
+
+@app.patch("/api/learning/voice-sessions/{session_id}")
+async def finish_voice_practice_session(session_id: int, request: Request):
+    if not request.session.get("email_verified"):
+        return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+    if not valid_csrf(request, request.headers.get("x-csrf-token", "")):
+        return JSONResponse({"detail": "Invalid form token"}, status_code=403)
+    try:
+        payload = await request.json()
+        status = str(payload.get("status", "completed"))
+        elapsed = max(0, min(3600, int(payload.get("elapsed_seconds", 0))))
+        prompts = max(0, min(50, int(payload.get("prompt_count", 0))))
+    except (ValueError, TypeError, AttributeError):
+        return JSONResponse({"detail": "Invalid voice practice result"}, status_code=422)
+    if status not in {"completed", "abandoned"}:
+        return JSONResponse({"detail": "Invalid session status"}, status_code=422)
+    with connection() as db, db.cursor() as cur:
+        cur.execute(
+            """UPDATE voice_practice_sessions SET status=%s, elapsed_seconds=%s,
+               prompt_count=%s, ended_at=CURRENT_TIMESTAMP
+               WHERE id=%s AND user_id=%s AND status='in_progress'""",
+            (status, elapsed, prompts, session_id, request.session["user_id"]),
+        )
+        saved = cur.rowcount == 1
+    if not saved:
+        return JSONResponse({"detail": "Voice practice session was not found or already ended."}, status_code=404)
+    return {"saved": True, "session_id": session_id, "status": status}
 
 
 @app.get("/api/learning/progress")
